@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useData } from '../../../context/DataContext';
 import { BranchBusinessType, BranchDocument, DocumentType } from '../../../types';
 import { validateUploadedFile } from '../../../utils/fileValidation';
@@ -25,7 +25,6 @@ import {
 interface BranchApplicationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
 }
 
 const BUSINESS_TYPES: BranchBusinessType[] = [
@@ -85,7 +84,6 @@ const REQUIRED_DOCS_LIST: RequiredDocConfig[] = [
 export const BranchApplicationModal: React.FC<BranchApplicationModalProps> = ({
   isOpen,
   onClose,
-  onSuccess,
 }) => {
   const { submitBranchApplication, themeMode, branches, branchApplications } = useData();
   const isDark = themeMode === 'dark';
@@ -122,6 +120,25 @@ export const BranchApplicationModal: React.FC<BranchApplicationModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedSuccessAppId, setSubmittedSuccessAppId] = useState<string | null>(null);
   const [scanningDocType, setScanningDocType] = useState<DocumentType | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setCurrentStep(1);
+      setBranchName('');
+      setBusinessType('Franchise Kiosk');
+      setAddress('');
+      setContactNumber('');
+      setEmail('');
+      setOperatingHours('10:00 AM - 9:00 PM (Mall Hours)');
+      setManagerName('');
+      setManagerPhone('');
+      setManagerEmail('');
+      setManagerGovId('');
+      setUploadedFiles([]);
+      setValidationError('');
+      setSubmittedSuccessAppId(null);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -290,7 +307,6 @@ export const BranchApplicationModal: React.FC<BranchApplicationModalProps> = ({
       });
 
       setSubmittedSuccessAppId(newApp.id);
-      if (onSuccess) onSuccess();
     } catch (err: any) {
       setValidationError(err.message || 'Failed to submit application. Please try again.');
     } finally {

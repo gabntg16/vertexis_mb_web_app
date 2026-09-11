@@ -1153,12 +1153,44 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       managerGovId: string;
       documents?: BranchDocument[];
     }): BranchApplication => {
+      const normalizedName = data.branchName.trim().toLowerCase();
+      const normalizedAddress = data.address.trim().toLowerCase();
+      const normalizedEmail = data.email.trim().toLowerCase();
+      const hasMatchingBranch = branches.some(
+        (branch) =>
+          branch.name.trim().toLowerCase() === normalizedName ||
+          branch.location.trim().toLowerCase() === normalizedAddress ||
+          branch.email.trim().toLowerCase() === normalizedEmail
+      );
+      const hasMatchingApplication = branchApplications.some(
+        (application) =>
+          application.status !== 'Rejected' &&
+          (application.branchName.trim().toLowerCase() === normalizedName ||
+            application.address.trim().toLowerCase() === normalizedAddress ||
+            application.email.trim().toLowerCase() === normalizedEmail)
+      );
+
+      if (hasMatchingBranch || hasMatchingApplication) {
+        throw new Error('A branch or application already exists for this name, location, or email address.');
+      }
+
       const citySlug = (data.address.split(',')[0] || data.branchName)
         .replace(/Marsh Bites/gi, '')
         .trim()
         .substring(0, 3)
         .toUpperCase();
-      const branchCode = `MB-${citySlug || 'PH'}-${String(branches.length + branchApplications.length + 1).padStart(2, '0')}`;
+      const codePrefix = `MB-${citySlug || 'PH'}-`;
+      const usedCodes = new Set(
+        [...branches.map((branch) => branch.code), ...branchApplications.map((application) => application.branchCode)].map(
+          (code) => code.toLowerCase()
+        )
+      );
+      let codeNumber = branches.length + branchApplications.length + 1;
+      let branchCode = `${codePrefix}${String(codeNumber).padStart(2, '0')}`;
+      while (usedCodes.has(branchCode.toLowerCase())) {
+        codeNumber += 1;
+        branchCode = `${codePrefix}${String(codeNumber).padStart(2, '0')}`;
+      }
       const appId = `app-${Date.now()}`;
 
       const newApp: BranchApplication = {
@@ -1199,7 +1231,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return newApp;
     },
-    [branches.length, branchApplications.length, logBranchAudit]
+    [branches, branchApplications, logBranchAudit]
   );
 
   const verifyDocument = useCallback(

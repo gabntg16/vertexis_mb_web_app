@@ -613,7 +613,6 @@ export const AdminBranches: React.FC = () => {
       <BranchApplicationModal
         isOpen={showApplyModal}
         onClose={() => setShowApplyModal(false)}
-        onSuccess={() => setShowApplyModal(false)}
       />
 
       {/* 2. Review Application & Document Verification Modal */}

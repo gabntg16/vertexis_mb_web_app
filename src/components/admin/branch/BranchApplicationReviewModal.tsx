@@ -18,6 +18,8 @@ import {
   ShieldAlert,
   ShieldCheck,
   ExternalLink,
+  Eye,
+  Download,
   RotateCcw,
   Key,
   Copy,
@@ -59,6 +61,7 @@ export const BranchApplicationReviewModal: React.FC<BranchApplicationReviewModal
     staffAccount: any;
   } | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [previewDocument, setPreviewDocument] = useState<BranchDocument | null>(null);
 
   if (!isOpen || !application) return null;
 
@@ -102,6 +105,14 @@ export const BranchApplicationReviewModal: React.FC<BranchApplicationReviewModal
     setCopiedKey(keyName);
     setTimeout(() => setCopiedKey(null), 2000);
   };
+
+  const isPreviewableImage = (document: BranchDocument) =>
+    document.fileType?.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(document.fileName);
+
+  const isPreviewablePdf = (document: BranchDocument) =>
+    document.fileType === 'application/pdf' || document.fileName.toLowerCase().endsWith('.pdf');
+
+  const isInlinePreview = (document: BranchDocument) => document.fileUrl.startsWith('data:');
 
   return (
     <div
@@ -403,6 +414,27 @@ export const BranchApplicationReviewModal: React.FC<BranchApplicationReviewModal
                                     Notes: &quot;{doc.remarks}&quot;
                                   </p>
                                 )}
+                                <div className="flex items-center gap-2 mt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewDocument(doc)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#80C7F2]/40 px-2.5 py-1.5 text-[11px] font-bold text-[#80C7F2] transition-colors hover:bg-[#80C7F2]/10"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    View file
+                                  </button>
+                                  {doc.fileUrl && !isInlinePreview(doc) && (
+                                    <a
+                                      href={doc.fileUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-white"
+                                    >
+                                      <ExternalLink className="w-3.5 h-3.5" />
+                                      Open link
+                                    </a>
+                                  )}
+                                </div>
                               </div>
                             </div>
 
@@ -648,6 +680,87 @@ export const BranchApplicationReviewModal: React.FC<BranchApplicationReviewModal
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Approve Branch & Provision Accounts</span>
               </button>
+            </div>
+          </div>
+        )}
+
+        {previewDocument && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Preview ${previewDocument.fileName}`}
+            onClick={() => setPreviewDocument(null)}
+          >
+            <div
+              className={`relative flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border shadow-2xl ${
+                isDark ? 'border-neutral-700 bg-[#121212]' : 'border-neutral-200 bg-white'
+              }`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-neutral-800 px-4 py-3">
+                <div className="min-w-0">
+                  <h3 className="truncate text-sm font-bold">{previewDocument.title}</h3>
+                  <p className="truncate text-[11px] text-neutral-500">{previewDocument.fileName}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {previewDocument.fileUrl && (
+                    <a
+                      href={previewDocument.fileUrl}
+                      download={previewDocument.fileName}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-700 px-2.5 py-1.5 text-xs font-semibold text-neutral-300 hover:bg-neutral-800"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setPreviewDocument(null)}
+                    className="rounded-lg p-2 text-neutral-400 hover:bg-neutral-800 hover:text-white"
+                    aria-label="Close file preview"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex min-h-[240px] flex-1 items-center justify-center overflow-auto bg-neutral-950 p-4">
+                {isInlinePreview(previewDocument) && isPreviewableImage(previewDocument) ? (
+                  <img
+                    src={previewDocument.fileUrl}
+                    alt={previewDocument.title}
+                    className="max-h-[72vh] max-w-full rounded-lg object-contain"
+                  />
+                ) : isInlinePreview(previewDocument) && isPreviewablePdf(previewDocument) ? (
+                  <iframe
+                    src={previewDocument.fileUrl}
+                    title={previewDocument.title}
+                    className="h-[72vh] w-full rounded-lg bg-white"
+                  />
+                ) : (
+                  <div className="max-w-md space-y-3 text-center">
+                    <FileText className="mx-auto h-10 w-10 text-neutral-500" />
+                    <p className="text-sm font-semibold text-white">Preview is not available in this session.</p>
+                    <p className="text-xs text-neutral-400">
+                      The file metadata is available, but the stored file URL cannot be rendered inline here.
+                    </p>
+                    {previewDocument.fileUrl && (
+                      <a
+                        href={previewDocument.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-[#80C7F2] px-3 py-2 text-xs font-bold text-neutral-900 hover:bg-[#6cb6e3]"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Open stored file
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
