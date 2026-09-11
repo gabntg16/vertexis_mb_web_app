@@ -1,0 +1,436 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VertexIS Marsh Bites Database Blueprint",
+  "description": "Firestore database blueprint for Centralized Marsh Bites Multi-Branch Franchise Management",
+  "entities": {
+    "branches": {
+      "title": "Branch",
+      "description": "Marsh Bites store branches with complete profile and lifecycle status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "businessType": { "type": "string" },
+        "location": { "type": "string" },
+        "contactNumber": { "type": "string" },
+        "email": { "type": "string" },
+        "operatingHours": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Pending Activation", "Suspended", "Inactive", "Closed"] },
+        "managerName": { "type": "string" },
+        "managerPhone": { "type": "string" },
+        "managerEmail": { "type": "string" },
+        "managerGovId": { "type": "string" },
+        "applicationId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "closedAt": { "type": "string" },
+        "archivedAt": { "type": "string" },
+        "suspensionReason": { "type": "string" }
+      },
+      "required": ["id", "name", "code", "location", "status"]
+    },
+    "branch_documents": {
+      "title": "BranchDocument",
+      "description": "Uploaded branch legal permits and compliance documents",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branchId": { "type": "string" },
+        "applicationId": { "type": "string" },
+        "documentType": { "type": "string", "enum": ["business_permit", "dti_registration", "bir_registration", "mayors_permit", "government_id", "lease_contract", "other"] },
+        "title": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileSize": { "type": "string" },
+        "fileType": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "verified", "rejected", "resubmission_requested"] },
+        "remarks": { "type": "string" },
+        "uploadedAt": { "type": "string" },
+        "verifiedAt": { "type": "string" },
+        "verifiedBy": { "type": "string" }
+      },
+      "required": ["id", "documentType", "title", "fileUrl", "status", "uploadedAt"]
+    },
+    "branch_applications": {
+      "title": "BranchApplication",
+      "description": "Franchise branch onboarding and registration applications",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branchName": { "type": "string" },
+        "branchCode": { "type": "string" },
+        "businessType": { "type": "string" },
+        "address": { "type": "string" },
+        "contactNumber": { "type": "string" },
+        "email": { "type": "string" },
+        "operatingHours": { "type": "string" },
+        "managerName": { "type": "string" },
+        "managerPhone": { "type": "string" },
+        "managerEmail": { "type": "string" },
+        "managerGovId": { "type": "string" },
+        "documents": { "type": "array" },
+        "status": { "type": "string", "enum": ["Pending Review", "Under Verification", "Approved", "Rejected", "Requires Revision"] },
+        "reviewNotes": { "type": "string" },
+        "rejectionReason": { "type": "string" },
+        "revisionRemarks": { "type": "string" },
+        "submittedAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "reviewedAt": { "type": "string" },
+        "reviewedBy": { "type": "string" },
+        "approvedBranchId": { "type": "string" }
+      },
+      "required": ["id", "branchName", "branchCode", "businessType", "address", "managerName", "status", "submittedAt"]
+    },
+    "branch_accounts": {
+      "title": "BranchAccount",
+      "description": "Role-assigned user accounts per branch",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branchId": { "type": "string" },
+        "branchName": { "type": "string" },
+        "username": { "type": "string" },
+        "temporaryPassword": { "type": "string" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["Branch Manager", "Staff", "Cashier", "Inventory Specialist"] },
+        "permissions": { "type": "array" },
+        "isActive": { "type": "boolean" },
+        "credentialsSent": { "type": "boolean" },
+        "credentialsSentAt": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "lastLoginAt": { "type": "string" }
+      },
+      "required": ["id", "branchId", "username", "role", "email", "isActive"]
+    },
+    "branch_status_history": {
+      "title": "BranchStatusHistory",
+      "description": "Lifecycle transition and suspension audit history per branch",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branchId": { "type": "string" },
+        "branchName": { "type": "string" },
+        "previousStatus": { "type": "string" },
+        "newStatus": { "type": "string" },
+        "reason": { "type": "string" },
+        "changedBy": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "branchId", "previousStatus", "newStatus", "timestamp", "changedBy"]
+    },
+    "branch_audit_logs": {
+      "title": "BranchAuditLog",
+      "description": "Comprehensive security and operational audit trail for branches",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branchId": { "type": "string" },
+        "branchName": { "type": "string" },
+        "action": { "type": "string" },
+        "user": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "remarks": { "type": "string" }
+      },
+      "required": ["id", "action", "user", "timestamp", "remarks"]
+    },
+    "users": {
+      "title": "User",
+      "description": "System operators, managers, and admins",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "password": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "branch"] },
+        "branchId": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "products": {
+      "title": "Product",
+      "description": "Gourmet Marshmallow flavor catalogs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "flavor": { "type": "string" },
+        "price": { "type": "number" },
+        "adminStock": { "type": "number" }
+      },
+      "required": ["id", "name", "flavor", "price"]
+    },
+    "orders": {
+      "title": "Order",
+      "description": "Branch purchase requests and stock replenishment orders",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branchId": { "type": "string" },
+        "branchName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "waitingApproval", "approved", "rejected"] },
+        "totalAmount": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "items": { "type": "array" },
+        "proofImagePath": { "type": "string" },
+        "rejectionReason": { "type": "string" }
+      },
+      "required": ["id", "branchId", "status", "totalAmount", "createdAt"]
+    },
+    "deliveries": {
+      "title": "Delivery",
+      "description": "Logistics fleet deliveries to branches",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "address": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "inTransit", "delivered", "canceled"] },
+        "scheduledAt": { "type": "string" },
+        "deliveredAt": { "type": "string" },
+        "courierName": { "type": "string" },
+        "trackingNumber": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "orderId", "branchId", "status"]
+    },
+    "receivings": {
+      "title": "Receiving",
+      "description": "Branch quality inspection and intake records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "deliveryId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "received", "damaged", "returned"] },
+        "createdAt": { "type": "string" },
+        "receivedAt": { "type": "string" },
+        "receiverName": { "type": "string" },
+        "conditionNotes": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "deliveryId", "orderId", "branchId", "status"]
+    },
+    "inventory": {
+      "title": "InventoryItem",
+      "description": "Branch stock levels per flavor",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branchId": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "stock": { "type": "number" }
+      },
+      "required": ["id", "branchId", "productId", "stock"]
+    },
+    "sales": {
+      "title": "Sale",
+      "description": "Point-of-sale customer transactions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branchId": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "quantity": { "type": "number" },
+        "total": { "type": "number" },
+        "date": { "type": "string" },
+        "receiptPath": { "type": "string" }
+      },
+      "required": ["id", "branchId", "productId", "quantity", "total", "date"]
+    },
+    "announcements": {
+      "title": "Announcement",
+      "description": "HQ broadcasts and bulletins",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "message"]
+    },
+    "events": {
+      "title": "CalendarEvent",
+      "description": "Production runs, audits, and schedules",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["task", "appointment"] },
+        "branchId": { "type": "string" },
+        "branchName": { "type": "string" }
+      },
+      "required": ["id", "title", "date", "type"]
+    },
+    "birReceipts": {
+      "title": "BIRReceipt",
+      "description": "BIR-compliant official sales receipts with VAT breakdowns and sequential numbering",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "receiptNumber": { "type": "string" },
+        "sequenceNumber": { "type": "number" },
+        "branchId": { "type": "string" },
+        "branchCode": { "type": "string" },
+        "branchName": { "type": "string" },
+        "branchAddress": { "type": "string" },
+        "branchContact": { "type": "string" },
+        "terminalId": { "type": "string" },
+        "cashierId": { "type": "string" },
+        "cashierName": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "items": { "type": "array" },
+        "grossSales": { "type": "number" },
+        "discountType": { "type": "string" },
+        "discountAmount": { "type": "number" },
+        "seniorPwdDetail": { "type": "object" },
+        "netSales": { "type": "number" },
+        "vatableSales": { "type": "number" },
+        "vatAmount": { "type": "number" },
+        "vatExemptSales": { "type": "number" },
+        "zeroRatedSales": { "type": "number" },
+        "payments": { "type": "array" },
+        "totalAmountTendered": { "type": "number" },
+        "change": { "type": "number" },
+        "status": { "type": "string", "enum": ["completed", "voided", "refunded"] },
+        "voidReason": { "type": "string" },
+        "voidedBy": { "type": "string" },
+        "voidedAt": { "type": "string" },
+        "refundReason": { "type": "string" },
+        "refundedBy": { "type": "string" },
+        "refundedAt": { "type": "string" },
+        "refundAmount": { "type": "number" },
+        "syncedToCloud": { "type": "boolean" }
+      },
+      "required": ["id", "receiptNumber", "branchId", "grossSales", "netSales", "status", "timestamp"]
+    },
+    "inventoryMovements": {
+      "title": "InventoryMovementRecord",
+      "description": "Stock audit trail tracking sales, voids, refunds, transfers, and adjustments",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branchId": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "type": { "type": "string" },
+        "quantity": { "type": "number" },
+        "previousStock": { "type": "number" },
+        "newStock": { "type": "number" },
+        "referenceNo": { "type": "string" },
+        "performedBy": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "branchId", "productId", "type", "quantity", "timestamp"]
+    },
+    "posAuditLogs": {
+      "title": "POSAuditLog",
+      "description": "Security and event audit log for point-of-sale terminal activities",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "branchId": { "type": "string" },
+        "branchCode": { "type": "string" },
+        "user": { "type": "string" },
+        "userRole": { "type": "string" },
+        "action": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "details": { "type": "string" },
+        "deviceInfo": { "type": "string" },
+        "referenceId": { "type": "string" },
+        "ipAddress": { "type": "string" }
+      },
+      "required": ["id", "branchId", "action", "timestamp", "details"]
+    },
+    "shiftClosings": {
+      "title": "ShiftClosingRecord",
+      "description": "Official End-of-Day Z-Reading cash register closing records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "zReadingNumber": { "type": "string" },
+        "sequenceNumber": { "type": "number" },
+        "branchId": { "type": "string" },
+        "branchCode": { "type": "string" },
+        "branchName": { "type": "string" },
+        "terminalId": { "type": "string" },
+        "cashierId": { "type": "string" },
+        "cashierName": { "type": "string" },
+        "openedAt": { "type": "string" },
+        "closedAt": { "type": "string" },
+        "openingFloat": { "type": "number" },
+        "cashSales": { "type": "number" },
+        "digitalSales": { "type": "number" },
+        "cardSales": { "type": "number" },
+        "bankTransferSales": { "type": "number" },
+        "totalGrossSales": { "type": "number" },
+        "totalDiscounts": { "type": "number" },
+        "totalVatAmount": { "type": "number" },
+        "totalVatableSales": { "type": "number" },
+        "totalVatExemptSales": { "type": "number" },
+        "totalZeroRatedSales": { "type": "number" },
+        "totalNetSales": { "type": "number" },
+        "totalTransactions": { "type": "number" },
+        "beginningReceiptNo": { "type": "string" },
+        "endingReceiptNo": { "type": "string" },
+        "totalVoids": { "type": "number" },
+        "totalVoidAmount": { "type": "number" },
+        "totalRefunds": { "type": "number" },
+        "totalRefundAmount": { "type": "number" },
+        "expectedCash": { "type": "number" },
+        "actualCash": { "type": "number" },
+        "cashVariance": { "type": "number" },
+        "cashBreakdown": { "type": "array" },
+        "previousAccumulatedGrandTotal": { "type": "number" },
+        "todayAccumulatedSales": { "type": "number" },
+        "newAccumulatedGrandTotal": { "type": "number" },
+        "managerApprovedBy": { "type": "string" },
+        "notes": { "type": "string" },
+        "syncedToCloud": { "type": "boolean" }
+      },
+      "required": ["id", "zReadingNumber", "branchId", "totalNetSales", "closedAt"]
+    },
+    "production_batches": {
+      "title": "ProductionBatch",
+      "description": "Live made-to-order confectionery kitchen batches and kettle runs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "batchCode": { "type": "string" },
+        "productId": { "type": "string" },
+        "productFlavor": { "type": "string" },
+        "quantity": { "type": "number" },
+        "targetOrderId": { "type": "string" },
+        "targetBranchName": { "type": "string" },
+        "stage": { "type": "string", "enum": ["in_kettle", "curing", "packaged", "completed"] },
+        "chefName": { "type": "string" },
+        "startedAt": { "type": "string" },
+        "completedAt": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "batchCode", "productId", "quantity", "stage", "chefName", "startedAt"]
+    },
+    "system_sync": {
+      "title": "SystemSync",
+      "description": "System state metadata and sync heartbeat",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "lastUpdated": { "type": "string" },
+        "version": { "type": "number" }
+      },
+      "required": ["id", "lastUpdated"]
+    }
+  }
+}

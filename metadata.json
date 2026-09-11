@@ -1,0 +1,8 @@
+{
+  "name": "VertexIS - Marsh Bites Branch System",
+  "description": "VertexIS: An Ordering and Inventory System with Predictive Demand Analytics for Marsh Bites, Legazpi City — featuring inter-branch requisitions with Naga Central Commissary, physical shelf inventory audits, spoilage isolation, and Single Exponential Smoothing demand forecasting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

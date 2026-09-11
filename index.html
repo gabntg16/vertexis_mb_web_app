@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/marshbites_logo.jpg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VertexIS - Marsh Bites Branch System</title>
+    <meta name="description" content="VertexIS: An Ordering and Inventory System with Predictive Demand Analytics for Marsh Bites, Legazpi City — featuring inter-branch requisitions with Naga Central Commissary, physical shelf inventory audits, spoilage isolation, and Single Exponential Smoothing demand forecasting." />
+    <meta property="og:title" content="VertexIS - Marsh Bites Branch System" />
+    <meta property="og:description" content="VertexIS: An Ordering and Inventory System with Predictive Demand Analytics for Marsh Bites, Legazpi City — featuring inter-branch requisitions with Naga Central Commissary, physical shelf inventory audits, spoilage isolation, and Single Exponential Smoothing demand forecasting." />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        function isExtensionNoise(msg, filename) {
+          var str = (msg || '') + ' ' + (filename || '');
+          return /MetaMask|ethereum|inpage|chrome-extension|moz-extension|safari-extension|extension context/i.test(str);
+        }
+        window.addEventListener('error', function(e) {
+          if (isExtensionNoise(e.message || (e.error && e.error.message), e.filename)) {
+            e.preventDefault && e.preventDefault();
+            e.stopPropagation && e.stopPropagation();
+            return true;
+          }
+        }, true);
+        window.addEventListener('unhandledrejection', function(e) {
+          var reason = (e && e.reason) ? (e.reason.message || String(e.reason)) : '';
+          if (isExtensionNoise(reason, '')) {
+            e.preventDefault && e.preventDefault();
+            e.stopPropagation && e.stopPropagation();
+            return true;
+          }
+        }, true);
+      })();
+    </script>
+  </head>
+  <body class="bg-[#F8F9FA] text-[#231F20] antialiased selection:bg-[#80C7F2]/30">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

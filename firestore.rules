@@ -1,0 +1,146 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // System metadata & sync heartbeat
+    match /system_sync/{docId} {
+      allow read, write: if true;
+    }
+
+    // Branches directory & lifecycle
+    match /branches/{branchId} {
+      allow read, write: if true;
+    }
+
+    // Branch document uploads & verification records
+    match /branch_documents/{docId} {
+      allow read, write: if true;
+    }
+
+    // Branch franchise registration applications
+    match /branch_applications/{appId} {
+      allow read, write: if true;
+    }
+
+    // Branch user & staff accounts
+    match /branch_accounts/{accId} {
+      allow read, write: if true;
+    }
+
+    // Branch status transitions & history
+    match /branch_status_history/{histId} {
+      allow read, write: if true;
+    }
+
+    // Branch security & operational audit logs
+    match /branch_audit_logs/{logId} {
+      allow read, write: if true;
+    }
+
+    // Users and roles
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Products catalog
+    match /products/{productId} {
+      allow read, write: if true;
+    }
+
+    // Orders & stock allocation
+    match /orders/{orderId} {
+      allow read, write: if true;
+    }
+
+    // Fleet deliveries
+    match /deliveries/{deliveryId} {
+      allow read, write: if true;
+    }
+
+    // Quality receiving inspections
+    match /receivings/{receivingId} {
+      allow read, write: if true;
+    }
+
+    // Branch inventory levels
+    match /inventory/{invId} {
+      allow read, write: if true;
+    }
+
+    // POS sales transactions
+    match /sales/{saleId} {
+      allow read, write: if true;
+    }
+
+    // Announcements
+    match /announcements/{annId} {
+      allow read, write: if true;
+    }
+
+    // Calendar events
+    match /events/{eventId} {
+      allow read, write: if true;
+    }
+
+    // Production batches (MTO Confectionery)
+    match /production_batches/{batchId} {
+      allow read, write: if true;
+    }
+
+    // BIR-compliant Official Receipts & Invoices
+    match /birReceipts/{recId} {
+      allow read, write: if true;
+    }
+    match /bir_receipts/{recId} {
+      allow read, write: if true;
+    }
+
+    // Inventory Movements & Stock Card Audit Trail
+    match /inventoryMovements/{movId} {
+      allow read, write: if true;
+    }
+    match /inventory_movements/{movId} {
+      allow read, write: if true;
+    }
+
+    // Point of Sale Security & Activity Audit Logs
+    match /posAuditLogs/{logId} {
+      allow read, write: if true;
+    }
+    match /pos_audit_logs/{logId} {
+      allow read, write: if true;
+    }
+
+    // End of Day Z-Reading & Shift Closings
+    match /shiftClosings/{shiftId} {
+      allow read, write: if true;
+    }
+    match /shift_closings/{shiftId} {
+      allow read, write: if true;
+    }
+
+    // Spoilage, Shrinkage & Waste Tracking
+    match /spoilage_records/{docId} {
+      allow read, write: if true;
+    }
+    match /spoilageRecords/{docId} {
+      allow read, write: if true;
+    }
+
+    // Physical Inventory Audits & Reconciliations
+    match /physical_audits/{docId} {
+      allow read, write: if true;
+    }
+    match /physicalAudits/{docId} {
+      allow read, write: if true;
+    }
+    match /physical_inventory_audits/{docId} {
+      allow read, write: if true;
+    }
+
+    // Connection Health Check
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+  }
+}
+
