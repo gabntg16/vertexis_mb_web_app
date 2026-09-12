@@ -58,7 +58,7 @@
   }
 
   .dark .mallow-shell {
-    background: linear-gradient(135deg, #101010, #1b1b1b);
+    background: #101010;
   }
 
   .mallow-sidebar {
@@ -68,7 +68,7 @@
   }
 
   .dark .mallow-sidebar {
-    background: rgba(18, 18, 18, 0.96);
+    background: #111111;
     border-color: rgba(255, 255, 255, 0.1);
     box-shadow: 8px 0 28px rgba(0, 0, 0, 0.24);
   }
@@ -80,7 +80,7 @@
   }
 
   .dark .mallow-header {
-    background: rgba(18, 18, 18, 0.94);
+    background: #111111;
     border-color: rgba(255, 255, 255, 0.1);
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.24);
   }
@@ -105,9 +105,8 @@
 
 .dark body,
 body:has(.dark) {
-  background-color: #17151a;
-  background-image: radial-gradient(rgba(248, 199, 216, 0.08) 1px, transparent 1px),
-    radial-gradient(rgba(185, 227, 247, 0.06) 1px, transparent 1px);
+  background-color: #101010;
+  background-image: none;
 }
 
 /* Custom scrollbars */

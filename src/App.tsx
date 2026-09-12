@@ -16,6 +16,7 @@ import { AdminSalesHistory } from './components/admin/AdminSalesHistory';
 import { AdminCalendar } from './components/admin/AdminCalendar';
 import { AdminAnnouncements } from './components/admin/AdminAnnouncements';
 import { AdminProductPricing } from './components/admin/AdminProductPricing';
+import { AdminUserManagement } from './components/admin/AdminUserManagement';
 
 // Branch Manager (Store Leadership & Audit) Views
 import { ManagerLogValidation } from './components/branch/ManagerLogValidation';
@@ -68,6 +69,7 @@ const MainShell: React.FC = () => {
           'sales',
           'calendar',
           'announcements',
+          'user_management',
         ].includes(prev)
           ? prev
           : 'requisition_approval'
@@ -175,6 +177,7 @@ const MainShell: React.FC = () => {
               {activeTab === 'sales' && <AdminSalesHistory />}
               {activeTab === 'calendar' && <AdminCalendar />}
               {activeTab === 'announcements' && <AdminAnnouncements />}
+              {activeTab === 'user_management' && <AdminUserManagement />}
               {/* Fallback route guard */}
               {![
                 'requisition_approval',

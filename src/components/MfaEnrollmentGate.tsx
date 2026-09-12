@@ -4,6 +4,7 @@ import {
   PhoneAuthProvider,
   PhoneMultiFactorGenerator,
   RecaptchaVerifier,
+  sendEmailVerification as sendFirebaseEmailVerification,
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { AlertCircle, LockKeyhole, Phone, ShieldCheck } from 'lucide-react';
@@ -13,6 +14,7 @@ export const MfaEnrollmentGate: React.FC = () => {
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationId, setVerificationId] = useState<string | null>(null);
   const [isEnrolled, setIsEnrolled] = useState(true);
+  const [emailVerified, setEmailVerified] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const verifierRef = useRef<RecaptchaVerifier | null>(null);
@@ -48,7 +50,12 @@ export const MfaEnrollmentGate: React.FC = () => {
 
   useEffect(() => {
     const user = auth.currentUser;
-    setIsEnrolled(Boolean(user && multiFactor(user).enrolledFactors.length > 0));
+    if (user) {
+      void user.reload().then(() => {
+        setEmailVerified(user.emailVerified);
+        setIsEnrolled(multiFactor(user).enrolledFactors.length > 0);
+      });
+    }
 
     return () => {
       verifierRef.current?.clear();
@@ -65,6 +72,45 @@ export const MfaEnrollmentGate: React.FC = () => {
     });
     verifierRef.current = verifier;
     return verifier;
+  };
+
+  const handleSendEmailVerification = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await sendFirebaseEmailVerification(user);
+      setError(
+        `Verification email sent to ${user.email || 'your email address'}. Check your inbox and spam folder, then click the verification link.`
+      );
+    } catch (verificationError) {
+      setError(getEnrollmentErrorMessage(verificationError, 'Unable to send the verification email.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const checkEmailVerification = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await user.reload();
+      if (!user.emailVerified) {
+        setError('Your email is still unverified. Open the verification link from your inbox, then check again.');
+        return;
+      }
+      setEmailVerified(true);
+      setError(null);
+    } catch (verificationError) {
+      setError(getEnrollmentErrorMessage(verificationError, 'Unable to check email verification.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const sendCode = async () => {
@@ -146,7 +192,29 @@ export const MfaEnrollmentGate: React.FC = () => {
           </div>
         )}
 
-        {!verificationId ? (
+        {!emailVerified ? (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+              Verify your Firebase email address before setting up phone MFA.
+            </div>
+            <button
+              type="button"
+              onClick={handleSendEmailVerification}
+              disabled={isSubmitting}
+              className="w-full rounded-xl bg-[#F37021] px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {isSubmitting ? 'Sending email...' : 'Send verification email'}
+            </button>
+            <button
+              type="button"
+              onClick={checkEmailVerification}
+              disabled={isSubmitting}
+              className="w-full py-2 text-sm font-semibold text-[#1a7bb5] disabled:opacity-50"
+            >
+              I verified my email, check again
+            </button>
+          </div>
+        ) : !verificationId ? (
           <div className="space-y-4">
             <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500">
               Phone number

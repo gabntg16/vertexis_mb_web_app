@@ -195,9 +195,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badgeColor: 'bg-emerald-500 text-white',
     },
     { id: 'announcements', label: 'Announcements', icon: Megaphone },
+    { id: 'user_management', label: 'User Management', icon: Users },
   ];
 
-  const tabs = isStaff ? staffTabs : isManager ? managerTabs : adminPrimaryTabs;
+  const tabs = isStaff ? staffTabs : isManager ? managerTabs : [...adminPrimaryTabs, ...adminSecondaryTabs];
 
   const handleTabClick = (tabId: string) => {
     setActiveTab(tabId);
