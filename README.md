@@ -66,16 +66,4 @@ npm run dev
 
 # Build for production
 npm run build
-```
 
----
-
-## 📱 2. Mobile Companion App (Flutter)
-
-The Flutter mobile application is located in `./flutter_app/`. See [`flutter_app/README.md`](./flutter_app/README.md) for mobile deployment instructions.
-
-```bash
-cd flutter_app
-flutter pub get
-flutter run
-```
