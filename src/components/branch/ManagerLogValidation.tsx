@@ -439,7 +439,7 @@ export const ManagerLogValidation: React.FC = () => {
                         <span>Action A: Approve & Lock Shift</span>
                       </div>
                       <p className="text-[11px] text-neutral-600 dark:text-neutral-400 mt-1">
-                        Locks physical counts, manual sales, and wastage. Syncs validated daily figures to Naga City Commissary Hub.
+                        Locks physical counts, manual sales, and wastage. Syncs validated daily figures to Legazpi City Commissary Hub.
                       </p>
 
                       <div className="mt-3">

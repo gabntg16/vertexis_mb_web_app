@@ -1,5 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
+import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { db, staffCreationAuth } from '../../lib/firebase';
 import {
   Users,
   Shield,
@@ -35,8 +38,9 @@ export const AdminUserManagement: React.FC = () => {
   // New User Form State
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [newName, setNewName] = useState<string>('');
-  const [newUsername, setNewUsername] = useState<string>('');
-  const [newRole, setNewRole] = useState<Role>(Role.BRANCH_STAFF);
+  const [newEmail, setNewEmail] = useState<string>('');
+  const [newPassword, setNewPassword] = useState<string>('');
+  const [newRole, setNewRole] = useState<'admin' | 'staff'>('staff');
   const [newBranchId, setNewBranchId] = useState<string>('b-legazpi');
 
   const filteredUsers = useMemo(() => {
@@ -75,33 +79,45 @@ export const AdminUserManagement: React.FC = () => {
     }
   };
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newUsername.trim()) {
+    if (!newName.trim() || !newEmail.trim() || newPassword.length < 6) {
       setFeedback({ text: 'Please fill in all required user fields.', type: 'error' });
       return;
     }
 
-    const branch = branches.find((b) => b.id === newBranchId);
+    try {
+      const credential = await createUserWithEmailAndPassword(
+        staffCreationAuth,
+        newEmail.trim().toLowerCase(),
+        newPassword
+      );
+      const branch = branches.find((b) => b.id === newBranchId);
+      const role = newRole === 'admin' ? Role.SUPER_ADMIN : Role.BRANCH_STAFF;
+      const userProfile = {
+        id: credential.user.uid,
+        firebaseUid: credential.user.uid,
+        name: newName.trim(),
+        email: credential.user.email || newEmail.trim().toLowerCase(),
+        role,
+        branchId: role === Role.SUPER_ADMIN ? undefined : newBranchId,
+        branchName: role === Role.SUPER_ADMIN ? 'Central Commissary HQ' : branch?.name,
+      };
 
-    const res = addNewUser({
-      name: newName.trim(),
-      username: newUsername.trim().toLowerCase(),
-      role: newRole,
-      branchId: newRole === Role.SUPER_ADMIN ? undefined : newBranchId,
-      branchName: newRole === Role.SUPER_ADMIN ? 'Central Commissary HQ' : branch?.name,
-      isActive: true,
-      lastLogin: new Date().toISOString(),
-    });
+      await setDoc(doc(db, 'users', credential.user.uid), userProfile);
+      addNewUser(userProfile);
+      await signOut(staffCreationAuth);
 
-    if (res.success) {
-      setFeedback({ text: `Registered new user ${newName} (${newRole}).`, type: 'success' });
+      setFeedback({ text: `Created Firebase account for ${newName.trim()}.`, type: 'success' });
       setNewName('');
-      setNewUsername('');
+      setNewEmail('');
+      setNewPassword('');
       setShowAddModal(false);
       setTimeout(() => setFeedback(null), 4000);
-    } else {
-      setFeedback({ text: res.error || 'Failed to register user.', type: 'error' });
+    } catch (creationError) {
+      await signOut(staffCreationAuth).catch(() => undefined);
+      const message = creationError instanceof Error ? creationError.message : 'Failed to create Firebase account.';
+      setFeedback({ text: message, type: 'error' });
     }
   };
 
@@ -338,14 +354,29 @@ export const AdminUserManagement: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
-                  Username
+                  Email Address
                 </label>
                 <input
                   type="text"
                   required
-                  value={newUsername}
-                  onChange={(e) => setNewUsername(e.target.value)}
-                  placeholder="e.g. maria.santos"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="e.g. maria.santos@marshbites.com"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-[#121212] text-neutral-900 dark:text-white focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
+                  Temporary Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="At least 6 characters"
                   className="w-full px-3 py-2 text-xs rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-[#121212] text-neutral-900 dark:text-white focus:ring-2 focus:ring-purple-500"
                 />
               </div>
@@ -356,12 +387,11 @@ export const AdminUserManagement: React.FC = () => {
                 </label>
                 <select
                   value={newRole}
-                  onChange={(e) => setNewRole(e.target.value as Role)}
+                  onChange={(e) => setNewRole(e.target.value as 'admin' | 'staff')}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-[#121212] text-neutral-900 dark:text-white focus:ring-2 focus:ring-purple-500"
                 >
-                  <option value={Role.BRANCH_STAFF}>BRANCH_STAFF (Frontline Ground Operations)</option>
-                  <option value={Role.BRANCH_MANAGER}>BRANCH_MANAGER (Store Lead & Franchisee)</option>
-                  <option value={Role.SUPER_ADMIN}>SUPER_ADMIN (Headquarters & Commissary)</option>
+                  <option value="staff">Staff</option>
+                  <option value="admin">Admin</option>
                 </select>
               </div>
 

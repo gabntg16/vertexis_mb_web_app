@@ -8,6 +8,7 @@ dist-ssr/
 !.env.example
 .env.production
 vertexis.env
+auth-users.json
 
 # Miscellaneous
 *.class

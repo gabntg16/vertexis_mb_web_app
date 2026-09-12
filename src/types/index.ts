@@ -31,9 +31,10 @@ export type DailyLogStatusType =
 
 export interface UserModel {
   id: string;
+  firebaseUid?: string;
   name: string;
   email: string;
-  password: string;
+  password?: string;
   role: Role | UserRole | RoleType | 'admin' | 'branch' | string;
   branchId?: string;
   branchName?: string;

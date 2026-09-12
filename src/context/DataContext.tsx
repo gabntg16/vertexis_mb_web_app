@@ -61,6 +61,8 @@ import {
   generateInitialRBACUsers,
 } from '../data/initialDailyShiftData';
 import { firestoreSync, SyncState } from '../services/firestoreSync';
+import { auth } from '../lib/firebase';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import {
   idempotencyManager,
   validateStateTransition,
@@ -462,6 +464,7 @@ interface DataContextType {
   syncState: SyncState;
   toggleTheme: () => void;
   login: (email: string, pass: string) => UserModel | null;
+  loginWithFirebase: (email: string, pass: string) => Promise<UserModel>;
   logout: () => void;
   switchUser: (userId: string) => void;
   addBranch: (name: string, location: string, businessType?: string, contactNumber?: string, email?: string, operatingHours?: string, managerName?: string, managerPhone?: string, managerEmail?: string, managerGovId?: string) => Branch;
@@ -837,9 +840,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     generateInitialInterBranchTransfers()
   );
 
-  const [currentUser, setCurrentUser] = useState<UserModel | null>(() => users[0]);
+  const [currentUser, setCurrentUser] = useState<UserModel | null>(null);
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
   const [syncState, setSyncState] = useState<SyncState>({ status: 'syncing', lastSyncedAt: null });
+
+  useEffect(() => {
+    return onAuthStateChanged(auth, (firebaseUser) => {
+      if (!firebaseUser?.email) {
+        setCurrentUser(null);
+        return;
+      }
+
+      const found = users.find(
+        (user) =>
+          user.firebaseUid === firebaseUser.uid ||
+          user.email?.toLowerCase() === firebaseUser.email!.toLowerCase()
+      );
+      setCurrentUser(found || null);
+    });
+  }, [users]);
 
   // 1. Listen for Firestore sync state changes
   useEffect(() => {
@@ -879,10 +898,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (parsed.interBranchTransfers) setInterBranchTransfers(parsed.interBranchTransfers);
         if (parsed.registerShift) setRegisterShift(parsed.registerShift);
         if (parsed.themeMode) setThemeMode(parsed.themeMode);
-        if (parsed.currentUserId) {
-          const u = parsed.users?.find((x: UserModel) => x.id === parsed.currentUserId);
-          if (u) setCurrentUser(u);
-        }
       }
     } catch (e) {
       console.warn('Could not parse localStorage data', e);
@@ -1035,6 +1050,35 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     setCurrentUser(null);
+    void signOut(auth);
+  };
+
+  const loginWithFirebase = async (email: string, pass: string): Promise<UserModel> => {
+    const credential = await signInWithEmailAndPassword(auth, email.trim(), pass);
+    const found = users.find(
+      (user) =>
+        user.firebaseUid === credential.user.uid ||
+        user.email?.toLowerCase() === credential.user.email?.toLowerCase()
+    );
+
+    if (!found) {
+      await signOut(auth);
+      throw new Error(
+        `No VertexIS profile is linked to ${credential.user.email || 'this Firebase account'}. Ask an administrator to create a matching user profile or link this Firebase UID.`
+      );
+    }
+
+    const linkedProfile = found.firebaseUid === credential.user.uid
+      ? found
+      : { ...found, firebaseUid: credential.user.uid };
+
+    if (linkedProfile !== found) {
+      setUsers((prev) => prev.map((user) => (user.id === found.id ? linkedProfile : user)));
+      await firestoreSync.saveDoc('users', linkedProfile.id, linkedProfile);
+    }
+
+    setCurrentUser(linkedProfile);
+    return linkedProfile;
   };
 
   const switchUser = (userId: string) => {
@@ -5330,6 +5374,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         syncState,
         toggleTheme,
         login,
+        loginWithFirebase,
         logout,
         switchUser,
         addBranch,

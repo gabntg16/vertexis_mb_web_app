@@ -1,19 +1,142 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useData } from '../context/DataContext';
+import { auth } from '../lib/firebase';
+import {
+  getMultiFactorResolver,
+  PhoneAuthProvider,
+  PhoneMultiFactorGenerator,
+  RecaptchaVerifier,
+} from 'firebase/auth';
+import type { MultiFactorError, MultiFactorResolver } from 'firebase/auth';
 import marshbitesLogo from '../assets/images/marshbites_logo.jpg';
-import { Lock, Mail, ArrowRight, Sparkles, AlertCircle } from 'lucide-react';
+import { Lock, Mail, ArrowRight, Sparkles, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export const LoginScreen: React.FC = () => {
-  const { login, themeMode } = useData();
+  const { loginWithFirebase, themeMode } = useData();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mfaResolver, setMfaResolver] = useState<MultiFactorResolver | null>(null);
+  const [verificationId, setVerificationId] = useState<string | null>(null);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const getAuthErrorMessage = (authError: unknown, fallback: string) => {
+    const code =
+      authError && typeof authError === 'object' && 'code' in authError
+        ? String(authError.code)
+        : '';
+
+    if (code === 'auth/internal-error-encountered') {
+      return 'Firebase could not start the MFA SMS challenge. Check that this domain is authorized in Firebase Authentication and that Phone/MFA sign-in is enabled, then try Resend MFA code.';
+    }
+
+    return authError instanceof Error ? authError.message : fallback;
+  };
+
+  useEffect(() => () => {
+    recaptchaRef.current?.clear();
+    recaptchaRef.current = null;
+  }, []);
+
+  const sendMfaCode = async (resolver: MultiFactorResolver) => {
+    const phoneHint = resolver.hints.find(
+      (hint) => hint.factorId === PhoneMultiFactorGenerator.FACTOR_ID
+    );
+    if (!phoneHint) throw new Error('This account requires an unsupported MFA method.');
+
+    recaptchaRef.current?.clear();
+    recaptchaRef.current = null;
+
+    const verifier = new RecaptchaVerifier(auth, 'mfa-recaptcha-container', {
+      size: 'normal',
+      callback: () => setError(null),
+      'expired-callback': () => {
+        setError('The reCAPTCHA challenge expired. Complete it again before requesting an MFA code.');
+      },
+    });
+    recaptchaRef.current = verifier;
+
+    const provider = new PhoneAuthProvider(auth);
+    try {
+      await verifier.render();
+      const id = await provider.verifyPhoneNumber(
+        {
+          multiFactorHint: phoneHint,
+          session: resolver.session,
+        },
+        verifier
+      );
+      setVerificationId(id);
+      setMfaResolver(resolver);
+    } catch (error) {
+      verifier.clear();
+      recaptchaRef.current = null;
+      throw error;
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     setError(null);
-    const user = login(email, password);
-    if (!user) setError('Invalid email or password. Check your credentials and try again.');
+    try {
+      await loginWithFirebase(email, password);
+    } catch (authError) {
+      if (
+        authError &&
+        typeof authError === 'object' &&
+        'code' in authError &&
+        authError.code === 'auth/multi-factor-auth-required'
+      ) {
+        try {
+          const resolver = getMultiFactorResolver(auth, authError as MultiFactorError);
+          setMfaResolver(resolver);
+          await sendMfaCode(resolver);
+        } catch (mfaError) {
+          setError(getAuthErrorMessage(mfaError, 'Unable to send the MFA code.'));
+        }
+      } else {
+        setError(getAuthErrorMessage(authError, 'Invalid email or password.'));
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleMfaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting || !mfaResolver || !verificationId || !verificationCode.trim()) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const credential = PhoneAuthProvider.credential(verificationId, verificationCode.trim());
+      await mfaResolver.resolveSignIn(PhoneMultiFactorGenerator.assertion(credential));
+      window.location.reload();
+    } catch (mfaError) {
+      setError(getAuthErrorMessage(mfaError, 'Invalid MFA code.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResendMfaCode = async () => {
+    if (isSubmitting || !mfaResolver) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    setVerificationCode('');
+    try {
+      await sendMfaCode(mfaResolver);
+    } catch (mfaError) {
+      setError(getAuthErrorMessage(mfaError, 'Unable to resend the MFA code.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -58,7 +181,54 @@ export const LoginScreen: React.FC = () => {
             <span>Handmade Gourmet Marshmallows from Bicol</span>
           </div>
 
+          <div id="mfa-recaptcha-container" />
+
           {/* Form */}
+          {mfaResolver ? (
+            <form onSubmit={handleMfaSubmit} className="mt-6 space-y-4 text-left">
+              {error && (
+                <div className="flex items-center space-x-2 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1">
+                  Verification Code
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  required
+                  value={verificationCode}
+                  onChange={(event) => setVerificationCode(event.target.value)}
+                  placeholder="Enter the SMS code"
+                  className={`w-full px-4 py-3 rounded-xl text-sm border focus:outline-none focus:ring-2 focus:ring-[#80C7F2] ${
+                    themeMode === 'dark'
+                      ? 'bg-neutral-900/80 border-neutral-700 text-white placeholder-neutral-500'
+                      : 'bg-neutral-50 border-neutral-200 text-neutral-900 placeholder-neutral-400'
+                  }`}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="mallow-button w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#F37021] to-amber-500 text-white font-bold text-sm shadow-md flex items-center justify-center space-x-2"
+              >
+                <span>Verify MFA Code</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleResendMfaCode}
+                disabled={isSubmitting}
+                className="w-full py-2 text-sm font-semibold text-[#1a7bb5] dark:text-[#80C7F2] disabled:opacity-50"
+              >
+                {isSubmitting ? 'Sending code...' : 'Resend MFA code'}
+              </button>
+            </form>
+          ) : (
           <form onSubmit={handleSubmit} className="mt-6 space-y-4 text-left">
             {error && (
               <div className="flex items-center space-x-2 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs">
@@ -99,28 +269,43 @@ export const LoginScreen: React.FC = () => {
                   <Lock className="w-4 h-4" />
                 </div>
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className={`w-full pl-10 pr-4 py-3 rounded-xl text-sm border focus:outline-none focus:ring-2 focus:ring-[#80C7F2] transition-colors ${
+                  className={`w-full pl-10 pr-11 py-3 rounded-xl text-sm border focus:outline-none focus:ring-2 focus:ring-[#80C7F2] transition-colors ${
                     themeMode === 'dark'
                       ? 'bg-neutral-900/80 border-neutral-700 text-white placeholder-neutral-500'
                       : 'bg-neutral-50 border-neutral-200 text-neutral-900 placeholder-neutral-400'
                   }`}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute inset-y-0 right-0 w-11 flex items-center justify-center text-neutral-500 hover:text-[#F37021] dark:text-neutral-300 dark:hover:text-[#F37021] transition-colors"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" strokeWidth={2.25} />
+                  ) : (
+                    <Eye className="w-5 h-5" strokeWidth={2.25} />
+                  )}
+                </button>
               </div>
             </div>
 
             <button
               type="submit"
+              disabled={isSubmitting}
               className="mallow-button w-full mt-2 py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#F37021] to-amber-500 text-white font-bold text-sm shadow-md hover:opacity-95 active:scale-[0.99] transition-all flex items-center justify-center space-x-2"
             >
               <span>Sign In to System</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
+          )}
 
         </div>
 

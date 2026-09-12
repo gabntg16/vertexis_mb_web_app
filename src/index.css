@@ -15,6 +15,8 @@
 
   html {
     background: var(--mallow-cream);
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   body {
@@ -55,16 +57,32 @@
     background: linear-gradient(135deg, rgba(255, 250, 244, 0.88), rgba(242, 249, 253, 0.92));
   }
 
+  .dark .mallow-shell {
+    background: linear-gradient(135deg, #101010, #1b1b1b);
+  }
+
   .mallow-sidebar {
     background: rgba(255, 253, 250, 0.92);
     border-color: var(--mallow-line);
     box-shadow: 8px 0 28px rgba(76, 55, 67, 0.05);
   }
 
+  .dark .mallow-sidebar {
+    background: rgba(18, 18, 18, 0.96);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 8px 0 28px rgba(0, 0, 0, 0.24);
+  }
+
   .mallow-header {
     background: rgba(255, 253, 250, 0.84);
     border-color: var(--mallow-line);
     box-shadow: 0 6px 24px rgba(76, 55, 67, 0.05);
+  }
+
+  .dark .mallow-header {
+    background: rgba(18, 18, 18, 0.94);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.24);
   }
 
   .mallow-panel {

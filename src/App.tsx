@@ -3,6 +3,7 @@ import { DataProvider, useData } from './context/DataContext';
 import { Sidebar } from './components/Sidebar';
 import { TopHeader } from './components/TopHeader';
 import { LoginScreen } from './components/LoginScreen';
+import { MfaEnrollmentGate } from './components/MfaEnrollmentGate';
 import { isSuperAdmin, isBranchManager, isBranchStaff } from './utils/securityValidator';
 
 // Super Admin HQ Views
@@ -84,27 +85,29 @@ const MainShell: React.FC = () => {
   const isSuper = isSuperAdmin(currentUser);
 
   return (
-    <div
-      className={`mallow-shell min-h-screen flex transition-colors duration-200 ${
-        themeMode === 'dark' ? 'bg-[#101010] text-[#f2f2f2]' : 'text-neutral-900'
-      }`}
-    >
-      {/* Responsive Sidebar (Persistent Desktop & Off-Canvas Mobile Drawer) */}
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        isMobileOpen={isMobileOpen}
-        setIsMobileOpen={setIsMobileOpen}
-      />
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
-        {/* Sticky Top Header with Breadcrumbs & Responsive Controls */}
-        <TopHeader
+    <>
+      <MfaEnrollmentGate />
+      <div
+        className={`mallow-shell min-h-screen flex transition-colors duration-200 ${
+          themeMode === 'dark' ? 'bg-[#101010] text-[#f2f2f2]' : 'text-neutral-900'
+        }`}
+      >
+        {/* Responsive Sidebar (Persistent Desktop & Off-Canvas Mobile Drawer) */}
+        <Sidebar
           activeTab={activeTab}
-          onToggleMobileMenu={() => setIsMobileOpen(!isMobileOpen)}
-          onNavigateTab={setActiveTab}
+          setActiveTab={setActiveTab}
+          isMobileOpen={isMobileOpen}
+          setIsMobileOpen={setIsMobileOpen}
         />
+
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+          {/* Sticky Top Header with Breadcrumbs & Responsive Controls */}
+          <TopHeader
+            activeTab={activeTab}
+            onToggleMobileMenu={() => setIsMobileOpen(!isMobileOpen)}
+            onNavigateTab={setActiveTab}
+          />
 
         {/* View Content Enforcing 3-Tier RBAC Route Protection */}
         <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-7 animate-in fade-in duration-300">
@@ -207,7 +210,8 @@ const MainShell: React.FC = () => {
         </footer>
       </div>
 
-    </div>
+      </div>
+    </>
   );
 };
 
