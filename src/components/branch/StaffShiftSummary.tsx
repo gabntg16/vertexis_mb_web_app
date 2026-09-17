@@ -355,14 +355,14 @@ export const StaffShiftSummary: React.FC<StaffShiftSummaryProps> = ({ onNavigate
                     <td className="py-2.5 px-3 text-center font-mono">
                       <span
                         className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          item.variance === 0
+                              (item.variance ?? 0) === 0
                             ? 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400'
-                            : item.variance < 0
+                             : (item.variance ?? 0) < 0
                             ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
                             : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
                         }`}
                       >
-                        {item.variance > 0 ? `+${item.variance}` : item.variance}
+                        {(item.variance ?? 0) > 0 ? `+${item.variance}` : (item.variance ?? 0)}
                       </span>
                     </td>
                     <td className="py-2.5 px-4 text-neutral-500 dark:text-neutral-400 text-[11px] italic">

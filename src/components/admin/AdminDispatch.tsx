@@ -259,8 +259,8 @@ export const AdminDispatch: React.FC = () => {
       dispatchRef: delivery.trackingNumber || delivery.waybillNumber || delivery.id,
       orderId: delivery.orderId,
       dispatchMethod: delivery.dispatchMethod || 'company_driver',
-      courierName: delivery.courierName,
-      trackingNumber: delivery.trackingNumber,
+      courierName: delivery.courierName || 'In-House Commissary Fleet',
+      trackingNumber: delivery.trackingNumber || delivery.waybillNumber || delivery.id,
       waybillNumber: delivery.waybillNumber,
       driverName: delivery.driverName,
       driverPhone: delivery.driverPhone,
@@ -278,7 +278,7 @@ export const AdminDispatch: React.FC = () => {
         branchName: branch?.name || order?.branchName || 'Franchise Store',
         managerName: delivery.receiverContact || branch?.managerName || 'Store Manager',
         phone: delivery.receiverPhone || branch?.contactNumber || '',
-        address: delivery.address,
+          address: delivery.address || delivery.destinationAddress || branch?.address || branch?.location || order?.branchName || 'Branch destination',
       },
       items,
       totalPacks,
@@ -316,7 +316,7 @@ export const AdminDispatch: React.FC = () => {
       (del.waybillNumber && del.waybillNumber.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (del.courierName && del.courierName.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (branch && branch.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      del.address.toLowerCase().includes(searchQuery.toLowerCase());
+      (del.address || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus =
       activeTab === 'all'
@@ -694,7 +694,7 @@ export const AdminDispatch: React.FC = () => {
                         ) : (
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30 flex items-center space-x-1">
                             <Package className="w-3 h-3" />
-                            <span>{del.courierName.toUpperCase()}</span>
+                            <span>{(del.courierName || 'Third-Party Courier').toUpperCase()}</span>
                           </span>
                         )}
 

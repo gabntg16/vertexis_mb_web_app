@@ -69,10 +69,15 @@ export const ManagerInterBranchTransfers: React.FC = () => {
     }
 
     const res = createInterBranchTransfer({
-      fromBranchId: branchId,
-      fromBranchName: currentBranch?.name || 'Legazpi City',
-      toBranchId: targetBranch.id,
-      toBranchName: targetBranch.name,
+      sourceBranchId: branchId,
+      sourceBranchName: currentBranch?.name || 'Legazpi City',
+      targetBranchId: targetBranch.id,
+      targetBranchName: targetBranch.name,
+      items: [{
+        productId: currentProduct.id,
+        productName: `${currentProduct.flavor} (${currentProduct.name})`,
+        quantity,
+      }],
       productId: currentProduct.id,
       productName: `${currentProduct.flavor} (${currentProduct.name})`,
       quantity,

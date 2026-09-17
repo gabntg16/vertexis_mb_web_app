@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useData } from '../../../context/DataContext';
-import { BranchApplication, BranchDocument, DocumentVerificationStatus } from '../../../types';
+import { Branch, BranchAccount, BranchApplication, BranchDocument, DocumentVerificationStatus } from '../../../types';
 import {
   X,
   Store,
@@ -22,8 +22,6 @@ import {
   Download,
   RotateCcw,
   Key,
-  Copy,
-  Check,
 } from 'lucide-react';
 
 interface BranchApplicationReviewModalProps {
@@ -56,11 +54,12 @@ export const BranchApplicationReviewModal: React.FC<BranchApplicationReviewModal
   const [showResubmitForm, setShowResubmitForm] = useState(false);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [approvalResult, setApprovalResult] = useState<{
-    branch: any;
-    managerAccount: any;
-    staffAccount: any;
+    branch: Branch;
+    managerAccount: BranchAccount;
+    staffAccount: BranchAccount;
+    managerPasswordResetLink?: string;
+    staffPasswordResetLink?: string;
   } | null>(null);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [previewDocument, setPreviewDocument] = useState<BranchDocument | null>(null);
 
   if (!isOpen || !application) return null;
@@ -77,10 +76,10 @@ export const BranchApplicationReviewModal: React.FC<BranchApplicationReviewModal
     setShowResubmitForm(false);
   };
 
-  const handleApproveApplication = () => {
+  const handleApproveApplication = async () => {
     setApprovalError(null);
     try {
-      const res = approveBranchApplication(application.id);
+      const res = await approveBranchApplication(application.id);
       if (!res) {
         setApprovalError('This application could not be found or has already been processed. Refresh the branch list and try again.');
         return;
@@ -98,12 +97,6 @@ export const BranchApplicationReviewModal: React.FC<BranchApplicationReviewModal
     setShowRejectForm(false);
     onClose();
     if (onApplicationUpdated) onApplicationUpdated();
-  };
-
-  const copyToClipboard = (text: string, keyName: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(keyName);
-    setTimeout(() => setCopiedKey(null), 2000);
   };
 
   const isPreviewableImage = (document: BranchDocument) =>
@@ -181,8 +174,8 @@ export const BranchApplicationReviewModal: React.FC<BranchApplicationReviewModal
                 <h3 className="text-xl font-black">Branch Successfully Approved & Activated!</h3>
                 <p className="text-xs text-neutral-400 max-w-lg mx-auto">
                   The store profile <span className="text-white font-bold">{approvalResult.branch.name}</span> has been
-                  instantiated in the central franchise database with initial 0-stock inventory catalog. Default staff credentials have been
-                  generated:
+                  instantiated in the central franchise database with initial 0-stock inventory catalog. Login access is provisioned
+                  through the secure Firebase account workflow:
                 </p>
               </div>
 
@@ -217,21 +210,19 @@ export const BranchApplicationReviewModal: React.FC<BranchApplicationReviewModal
                       <span className="text-neutral-500">Username:</span>{' '}
                       <span className="font-mono text-neutral-300">{approvalResult.managerAccount.username}</span>
                     </div>
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-neutral-500">Temporary Password:</span>
-                      <div className="flex items-center space-x-1.5">
-                        <span className="font-mono text-xs px-2 py-0.5 rounded bg-neutral-900 border border-neutral-700 text-[#80C7F2] font-bold">
-                          {approvalResult.managerAccount.temporaryPassword}
-                        </span>
-                        <button
-                          onClick={() => copyToClipboard(approvalResult.managerAccount.temporaryPassword, 'mgr-pass')}
-                          className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white"
-                          title="Copy Password"
-                        >
-                          {copiedKey === 'mgr-pass' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
+                    <div className="pt-1 text-[11px] text-emerald-400">
+                      Firebase account provisioning and password delivery are handled by the trusted backend.
                     </div>
+                    {approvalResult.managerPasswordResetLink && (
+                      <a
+                        href={approvalResult.managerPasswordResetLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block break-all text-[10px] text-sky-500 underline"
+                      >
+                        Open manager’s one-time secure invite link
+                      </a>
+                    )}
                   </div>
                 </div>
 
@@ -264,21 +255,19 @@ export const BranchApplicationReviewModal: React.FC<BranchApplicationReviewModal
                       <span className="text-neutral-500">Username:</span>{' '}
                       <span className="font-mono text-neutral-300">{approvalResult.staffAccount.username}</span>
                     </div>
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-neutral-500">Temporary Password:</span>
-                      <div className="flex items-center space-x-1.5">
-                        <span className="font-mono text-xs px-2 py-0.5 rounded bg-neutral-900 border border-neutral-700 text-[#80C7F2] font-bold">
-                          {approvalResult.staffAccount.temporaryPassword}
-                        </span>
-                        <button
-                          onClick={() => copyToClipboard(approvalResult.staffAccount.temporaryPassword, 'staff-pass')}
-                          className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white"
-                          title="Copy Password"
-                        >
-                          {copiedKey === 'staff-pass' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
+                    <div className="pt-1 text-[11px] text-emerald-400">
+                      Firebase account provisioning and password delivery are handled by the trusted backend.
                     </div>
+                    {approvalResult.staffPasswordResetLink && (
+                      <a
+                        href={approvalResult.staffPasswordResetLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block break-all text-[10px] text-sky-500 underline"
+                      >
+                        Open staff member’s one-time secure invite link
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>

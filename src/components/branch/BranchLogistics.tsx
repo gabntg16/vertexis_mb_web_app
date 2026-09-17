@@ -103,7 +103,7 @@ export const BranchLogistics: React.FC = () => {
         courierName: selectedDeliveryForInspect.courierName || 'LBC Express',
         orderId: selectedDeliveryForInspect.orderId,
         dispatchedTotal: totalDispatched,
-        receivedTotal,
+        receivedTotal: totalReceived,
         discrepancyVariance: totalReceived - totalDispatched,
         itemizedDiscrepancies: discrepancies,
         receiverName: receiverName.trim(),

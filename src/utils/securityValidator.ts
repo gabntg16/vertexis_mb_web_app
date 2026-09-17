@@ -247,9 +247,11 @@ export function validateCommissaryAllocation(
 
 // 5. Made-to-Order Kitchen Stage Progression Finite State Machine
 const VALID_MTO_STAGE_TRANSITIONS: Record<ProductionStage, ProductionStage[]> = {
-  queued: ['in_kettle', 'curing', 'packaged', 'ready_for_dispatch'],
-  in_kettle: ['curing', 'packaged', 'ready_for_dispatch'],
-  curing: ['packaged', 'ready_for_dispatch'],
+  queued: ['in_kettle'],
+  in_kettle: ['curing', 'packaging', 'packaged'], // packaged keeps legacy records forward-compatible
+  in_production: ['curing', 'packaging'],
+  curing: ['packaging', 'packaged'], // packaged keeps legacy records forward-compatible
+  packaging: ['packaged'],
   packaged: ['ready_for_dispatch'],
   ready_for_dispatch: [], // Terminal stage
 };

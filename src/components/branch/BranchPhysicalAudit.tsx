@@ -147,7 +147,6 @@ export const BranchPhysicalAudit: React.FC<BranchPhysicalAuditProps> = ({ onRequ
     try {
       const newAudit = submitPhysicalAudit({
         branchId: currentBranch.id,
-        branchName: currentBranch.name,
         auditedBy: currentUser?.name || 'Branch Manager',
         auditorRole: currentUser?.role === 'admin' ? 'Super Admin' : 'Branch Manager',
         items: auditCalculations.items,

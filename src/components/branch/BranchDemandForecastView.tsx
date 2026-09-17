@@ -186,7 +186,7 @@ export const BranchDemandForecastView: React.FC<BranchDemandForecastViewProps> =
                 <div className="p-2.5 rounded-2xl bg-neutral-100 dark:bg-neutral-900/80">
                   <span className="text-[10px] text-neutral-400 font-medium">Safety Buffer (SS)</span>
                   <p className="font-black text-sm text-neutral-900 dark:text-white mt-0.5">
-                    {item.recommendedSafetyStock} packs
+                    {item.recommendedSafetyStock ?? item.safetyStockBuffer ?? 0} packs
                   </p>
                 </div>
               </div>
@@ -200,14 +200,14 @@ export const BranchDemandForecastView: React.FC<BranchDemandForecastViewProps> =
                   <span>Days of Inventory Remaining:</span>
                   <strong
                     className={
-                      item.daysOfInventoryLeft <= 3
+                      (item.estimatedDepletionDays ?? item.daysOfInventoryLeft ?? 0) <= 3
                         ? 'text-red-500 font-bold'
-                        : item.daysOfInventoryLeft <= 6
+                        : (item.estimatedDepletionDays ?? item.daysOfInventoryLeft ?? 0) <= 6
                         ? 'text-amber-500 font-bold'
                         : 'text-emerald-500'
                     }
                   >
-                    ~{item.daysOfInventoryLeft} days
+                    ~{item.estimatedDepletionDays ?? item.daysOfInventoryLeft ?? 0} days
                   </strong>
                 </div>
               </div>

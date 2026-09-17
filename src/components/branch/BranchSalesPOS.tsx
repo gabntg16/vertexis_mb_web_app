@@ -400,10 +400,9 @@ export const BranchSalesPOS: React.FC = () => {
       if (discountType === 'pwd_senior') {
         seniorDetailPayload = {
           customerName: seniorPwdName.trim(),
-          idType: 'Senior Citizen',
+          type: 'Senior Citizen',
           idNumber: seniorPwdIdNumber.trim(),
           tin: seniorPwdTin.trim() || undefined,
-          discountAmount,
         };
       }
 
@@ -950,7 +949,7 @@ export const BranchSalesPOS: React.FC = () => {
               <button
                 type="button"
                 disabled={cart.length === 0}
-                onClick={handleOpenCheckout}
+                onClick={() => handleOpenCheckout()}
                 className="w-full py-3 bg-[#F37021] hover:bg-[#d95d14] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl shadow-md transition-all flex items-center justify-center space-x-2"
               >
                 <CreditCard className="w-4 h-4" />

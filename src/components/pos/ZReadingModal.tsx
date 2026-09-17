@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import { CashDenominationCount, ShiftClosingRecord } from '../../types';
 import { generateClientRequestId } from '../../utils/idempotency';
+import { auth } from '../../lib/firebase';
+import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import {
   Printer,
   X,
@@ -107,16 +109,20 @@ export const ZReadingModal: React.FC<ZReadingModalProps> = ({ onClose, onZReadin
     });
   };
 
-  const handleCloseShift = () => {
+  const handleCloseShift = async () => {
     if (isSubmitting) return;
     setErrorMsg(null);
     const isAuthorizedManager = Boolean(
       currentUser &&
-        ['admin', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'branch_manager'].includes(currentUser.role) &&
-        currentUser.password === managerPin.trim()
+        ['admin', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'branch_manager'].includes(currentUser.role)
     );
     if (!isAuthorizedManager) {
-      setErrorMsg('Authorization failed. Enter the signed-in manager account password.');
+      setErrorMsg('Authorization failed. A signed-in manager account is required.');
+      return;
+    }
+
+    if (!managerPin.trim() || !auth.currentUser?.email) {
+      setErrorMsg('Re-enter the signed-in manager account password to authorize this closing.');
       return;
     }
 
@@ -127,6 +133,10 @@ export const ZReadingModal: React.FC<ZReadingModalProps> = ({ onClose, onZReadin
 
     setIsSubmitting(true);
     try {
+      await reauthenticateWithCredential(
+        auth.currentUser,
+        EmailAuthProvider.credential(auth.currentUser.email, managerPin.trim())
+      );
       const breakdownPayload: CashDenominationCount[] = Object.entries(counts)
         .map(([denom, count]) => ({
           denomination: Number(denom),
@@ -643,14 +653,13 @@ export const ZReadingModal: React.FC<ZReadingModalProps> = ({ onClose, onZReadin
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-medium text-neutral-700 dark:text-neutral-300 block mb-1">
-                      Manager Supervisor PIN <span className="text-neutral-400 font-normal">(e.g. 1234)</span>
+                      Re-enter Firebase Password
                     </label>
                     <input
                       type="password"
-                      maxLength={8}
                       value={managerPin}
                       onChange={(e) => setManagerPin(e.target.value)}
-                      placeholder="Enter 4-digit PIN"
+                      placeholder="Enter your account password"
                       className="w-full px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg focus:ring-1 focus:ring-[#F37021] focus:outline-hidden tracking-widest font-mono"
                     />
                   </div>

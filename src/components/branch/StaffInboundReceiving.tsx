@@ -21,9 +21,11 @@ import {
   X,
   ExternalLink,
   Zap,
+  Upload,
 } from 'lucide-react';
 import { DailyInboundReceivingItem, DailyLogStatus } from '../../types';
 import { JT_EXPRESS_TRACKING_URL } from '../../services/jtExpress';
+import { formatBytes, validateUploadedFile } from '../../utils/fileValidation';
 
 interface ManifestLineItem {
   id: string;
@@ -32,6 +34,7 @@ interface ManifestLineItem {
   receivedUnits: number;
   condition: 'good' | 'damaged' | 'shortage' | 'overage';
   notes: string;
+  damageProof?: DailyInboundReceivingItem['damageProof'];
 }
 
 interface StaffInboundReceivingProps {
@@ -245,6 +248,29 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
     );
   };
 
+  const handleDamageProofUpload = async (lineId: string, file?: File) => {
+    if (!file || !isEditable) return;
+
+    const validation = await validateUploadedFile(file, {
+      category: 'image_only',
+      maxSizeBytes: 10 * 1024 * 1024,
+      verifyImageDecodable: true,
+    });
+
+    if (!validation.isValid || !validation.dataUrl) {
+      setFeedback({ text: validation.error || 'Please upload a valid damage photo.', type: 'error' });
+      return;
+    }
+
+    handleUpdateLine(lineId, 'damageProof', {
+      fileName: validation.sanitizedFileName || file.name,
+      fileType: validation.detectedMimeType || file.type,
+      fileSize: validation.fileSizeFormatted || formatBytes(file.size),
+      dataUrl: validation.dataUrl,
+    });
+    setFeedback({ text: 'Damage proof attached to this receiving line.', type: 'success' });
+  };
+
   // Multi-item Manifest Summary Calculations
   const manifestSummary = useMemo(() => {
     let totalExpected = 0;
@@ -284,6 +310,17 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
       return;
     }
 
+    const missingDamageProof = manifestLines.find(
+      (line) => line.condition === 'damaged' && !line.damageProof
+    );
+    if (missingDamageProof) {
+      setFeedback({
+        text: 'Attach a clear photo proof for every damaged or ruined pack line before verifying the manifest.',
+        type: 'error',
+      });
+      return;
+    }
+
     setShowConfirmVerifyModal(true);
   };
 
@@ -305,6 +342,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
         receivedUnits: Math.max(0, Number(line.receivedUnits) || 0),
         condition: line.condition,
         notes: combinedNotes,
+        damageProof: line.damageProof,
       };
     });
 
@@ -389,6 +427,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
       receivedUnits: it.receivedUnits,
       condition: it.condition,
       notes: it.notes || '',
+      damageProof: it.damageProof,
     }));
     setManifestLines(
       newLines.length > 0
@@ -916,6 +955,37 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                           className="w-full px-2.5 py-1 text-[11px] rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-[#121212] text-neutral-700 dark:text-neutral-300 placeholder:text-neutral-400"
                         />
                       </div>
+
+                      {line.condition === 'damaged' && (
+                        <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-2.5 dark:border-rose-800/60 dark:bg-rose-950/20">
+                          <label className="flex cursor-pointer items-center justify-between gap-3 text-[11px] font-bold text-rose-800 dark:text-rose-300">
+                            <span className="flex items-center gap-1.5">
+                              <Upload className="h-3.5 w-3.5" />
+                              Damage / Ruined Pack Photo <span className="text-rose-600">*</span>
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,image/gif"
+                              disabled={!isEditable}
+                              onChange={(event) => {
+                                void handleDamageProofUpload(line.id, event.target.files?.[0]);
+                                event.currentTarget.value = '';
+                              }}
+                              className="block w-44 text-[10px] font-normal text-rose-700 file:mr-2 file:rounded-md file:border-0 file:bg-rose-600 file:px-2 file:py-1 file:text-[10px] file:font-bold file:text-white hover:file:bg-rose-700 dark:text-rose-300"
+                            />
+                          </label>
+                          {line.damageProof ? (
+                            <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-emerald-700 dark:text-emerald-300">
+                              <span className="truncate">Attached: {line.damageProof.fileName} ({line.damageProof.fileSize})</span>
+                              <a href={line.damageProof.dataUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 font-bold underline">
+                                Preview
+                              </a>
+                            </div>
+                          ) : (
+                            <p className="mt-1 text-[10px] text-rose-700 dark:text-rose-400">Required before this manifest can be verified.</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1048,6 +1118,16 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                                 <div className="text-[10px] text-neutral-400 italic truncate">
                                   {it.notes}
                                 </div>
+                              )}
+                              {it.damageProof && (
+                                <a
+                                  href={it.damageProof.dataUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 hover:underline dark:text-rose-400"
+                                >
+                                  <ExternalLink className="h-3 w-3" /> View damage proof ({it.damageProof.fileName})
+                                </a>
                               )}
                             </div>
 
@@ -1186,6 +1266,11 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                         <div className="font-semibold text-neutral-900 dark:text-white">{prod.flavor}</div>
                         {line.notes && (
                           <div className="text-[11px] text-neutral-400 italic mt-0.5">{line.notes}</div>
+                        )}
+                        {line.damageProof && (
+                          <div className="text-[10px] font-bold text-rose-600 dark:text-rose-400 mt-0.5">
+                            Damage proof attached: {line.damageProof.fileName}
+                          </div>
                         )}
                       </div>
                       <div className="flex items-center space-x-3 text-right">

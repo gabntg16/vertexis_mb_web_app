@@ -31,6 +31,8 @@ import {
 } from '../common/JTShippingLabel';
 import { JTTrackingModal } from '../common/JTTrackingModal';
 import { AdminPaymentVerificationQueue } from './AdminPaymentVerificationQueue';
+import { jtExpressService } from '../../services/jtExpress';
+import type { JTShippingLabelData } from '../../services/jtExpress';
 
 export const AdminOrders: React.FC = () => {
   const {
@@ -69,6 +71,7 @@ export const AdminOrders: React.FC = () => {
   const [deliveryNotes, setDeliveryNotes] = useState('Keep dry, gourmet marshmallows. Temperature sensitive.');
   const [isSubmittingDispatch, setIsSubmittingDispatch] = useState(false);
   const [activeManifestData, setActiveManifestData] = useState<DispatchManifestData | null>(null);
+  const [activeLabelData, setActiveLabelData] = useState<JTShippingLabelData | null>(null);
   const [activeTrackingNumber, setActiveTrackingNumber] = useState<string | null>(null);
   const [activeTrackingOrder, setActiveTrackingOrder] = useState<{ id: string; branch: string } | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -1381,9 +1384,14 @@ export const AdminOrders: React.FC = () => {
           onClose={() => setActiveManifestData(null)}
         />
       )}
+      {activeLabelData && (
+        <JTShippingLabel
+          labelData={activeLabelData}
+          onClose={() => setActiveLabelData(null)}
+        />
+      )}
         </>
       )}
     </div>
   );
 };
-

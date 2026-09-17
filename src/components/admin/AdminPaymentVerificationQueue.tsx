@@ -54,8 +54,7 @@ export const AdminPaymentVerificationQueue: React.FC = () => {
     return orders.filter(
       (o) =>
         o.proofImagePath &&
-        (o.status === 'waitingApproval' || o.status === 'pending') &&
-        o.status !== 'rejected'
+         (o.status === 'waitingApproval' || o.status === 'pending')
     );
   }, [orders]);
 

@@ -21,6 +21,9 @@ import {
   Receipt,
   Megaphone,
   CheckCheck,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw,
 } from 'lucide-react';
 import {
   NotificationKind,
@@ -62,8 +65,22 @@ export const AdminAnnouncements: React.FC = () => {
   const [filterKind, setFilterKind] = useState<string>('all');
   const [filterLocation, setFilterLocation] = useState<string>('all');
   const [filterAudience, setFilterAudience] = useState<string>('all');
+  const [demoDayOffset, setDemoDayOffset] = useState(0);
 
   const isDark = themeMode === 'dark';
+  const demoDate = useMemo(() => {
+    const date = new Date();
+    date.setHours(12, 0, 0, 0);
+    date.setDate(date.getDate() + demoDayOffset);
+    return date;
+  }, [demoDayOffset]);
+  const demoDateIso = demoDate.toISOString().split('T')[0];
+  const demoDateLabel = demoDate.toLocaleDateString([], {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
 
   // Available kinds array for selection
   const kindList: { key: NotificationKind; label: string; icon: React.ReactNode }[] = [
@@ -225,6 +242,67 @@ export const AdminAnnouncements: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {import.meta.env.DEV && (
+      <div
+        className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl border ${
+          isDark ? 'bg-[#161616] border-neutral-800' : 'bg-white border-neutral-200/80 shadow-xs'
+        }`}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="p-2 rounded-xl bg-[#80C7F2]/15 text-[#1a7bb5] dark:text-[#80C7F2]">
+            <Calendar className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">Demo Day Changer</p>
+            <p className="text-sm font-bold truncate text-neutral-900 dark:text-white">{demoDateLabel}</p>
+            <p className="text-[11px] text-neutral-500">Simulated ISO date: {demoDateIso}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setDemoDayOffset((offset) => offset - 1)}
+            className={`inline-flex items-center gap-1 px-2.5 py-2 rounded-xl border text-xs font-bold transition-colors ${
+              isDark
+                ? 'border-neutral-700 text-neutral-300 hover:bg-neutral-800'
+                : 'border-neutral-200 text-neutral-700 hover:bg-neutral-100'
+            }`}
+            title="Move demo date to the previous day"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            <span>Previous</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setDemoDayOffset(0)}
+            className={`inline-flex items-center gap-1 px-2.5 py-2 rounded-xl border text-xs font-bold transition-colors ${
+              isDark
+                ? 'border-neutral-700 text-neutral-300 hover:bg-neutral-800'
+                : 'border-neutral-200 text-neutral-700 hover:bg-neutral-100'
+            }`}
+            title="Reset demo date to today"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Today</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setDemoDayOffset((offset) => offset + 1)}
+            className={`inline-flex items-center gap-1 px-2.5 py-2 rounded-xl border text-xs font-bold transition-colors ${
+              isDark
+                ? 'border-neutral-700 text-neutral-300 hover:bg-neutral-800'
+                : 'border-neutral-200 text-neutral-700 hover:bg-neutral-100'
+            }`}
+            title="Move demo date to the next day"
+          >
+            <span>Next</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+      )}
 
       {/* Summary KPI Pills */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

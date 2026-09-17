@@ -29,7 +29,19 @@ import {
 } from '../safeguards/ProductionSafeguardModal';
 
 const STAGE_LABELS: Record<string, { label: string; icon: React.FC<{ className?: string }>; color: string; bg: string }> = {
+  queued: {
+    label: 'Queued for Production',
+    icon: Clock,
+    color: 'text-slate-500',
+    bg: 'bg-slate-500/10 border-slate-500/30',
+  },
   in_kettle: {
+    label: 'Kettle, Whip & Curing (Consolidated)',
+    icon: Flame,
+    color: 'text-amber-500',
+    bg: 'bg-amber-500/10 border-amber-500/30',
+  },
+  in_production: {
     label: 'Kettle, Whip & Curing (Consolidated)',
     icon: Flame,
     color: 'text-amber-500',
@@ -498,7 +510,7 @@ export const AdminProduction: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            disabled={!isBatchingEligible}
+                            disabled={!isBatchingEligible || (stage !== 'in_kettle' && stage !== 'curing')}
                             onClick={() => {
                               setSafeguardDetails({
                                 isOpen: true,
@@ -508,13 +520,13 @@ export const AdminProduction: React.FC = () => {
                                 orderId: ord.id,
                                 fromStage: 'Kettle & Cure',
                                 toStage: 'Packaging & QC',
-                                onConfirm: () => updateOrderProductionStage(ord.id, 'packaged'),
+                                onConfirm: () => updateOrderProductionStage(ord.id, 'packaging'),
                               });
                             }}
                             className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
-                              stage === 'packaged'
+                              stage === 'packaging' || stage === 'packaged'
                                 ? 'bg-purple-500 text-white shadow-xs'
-                                : isBatchingEligible
+                                : isBatchingEligible && (stage === 'in_kettle' || stage === 'curing')
                                 ? 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
                                 : 'text-neutral-300 dark:text-neutral-600 cursor-not-allowed opacity-50'
                             }`}
@@ -524,7 +536,7 @@ export const AdminProduction: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            disabled={!isBatchingEligible}
+                            disabled={!isBatchingEligible || stage !== 'packaged'}
                             onClick={() => {
                               setSafeguardDetails({
                                 isOpen: true,
@@ -540,11 +552,11 @@ export const AdminProduction: React.FC = () => {
                             className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
                               stage === 'ready_for_dispatch' || (stage as string) === 'ready'
                                 ? 'bg-emerald-500 text-white shadow-xs'
-                                : isBatchingEligible
+                                : isBatchingEligible && stage === 'packaged'
                                 ? 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
                                 : 'text-neutral-300 dark:text-neutral-600 cursor-not-allowed opacity-50'
                             }`}
-                            title={!isBatchingEligible ? 'Order must be approved with verified payment proof' : 'Mark Ready for Dispatch'}
+                            title={!isBatchingEligible ? 'Order must be approved with verified payment proof' : 'Complete Packaging & QC before marking Ready for Dispatch'}
                           >
                             4. Ready for Dispatch
                           </button>

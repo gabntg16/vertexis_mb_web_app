@@ -80,7 +80,7 @@ export const BranchStatusModal: React.FC<BranchStatusModalProps> = ({
 
     const res = permanentDeleteBranch(branch.id, reason.trim());
     if (!res.success) {
-      setErrorMessage(res.message);
+      setErrorMessage(res.message || 'The branch could not be permanently deleted.');
     } else {
       setDeletionSuccessResult(res.backupSnapshot);
       if (onStatusChanged) onStatusChanged();

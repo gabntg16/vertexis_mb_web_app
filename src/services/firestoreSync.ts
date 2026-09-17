@@ -7,6 +7,9 @@ import {
   getDocs,
   writeBatch,
   serverTimestamp,
+  query,
+  where,
+  Query,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import {
@@ -41,6 +44,30 @@ export interface SyncState {
   lastSyncedAt: Date | null;
   error?: string;
 }
+
+export type SyncScope =
+  | { role: 'admin' }
+  | { role: 'branch'; branchId: string; userId: string };
+
+const GLOBAL_COLLECTIONS = new Set(['products', 'announcements', 'events']);
+const BRANCH_SCOPED_COLLECTIONS = new Set([
+  'branch_documents',
+  'branch_accounts',
+  'branch_status_history',
+  'branch_audit_logs',
+  'orders',
+  'deliveries',
+  'receivings',
+  'inventory',
+  'sales',
+  'production_batches',
+  'birReceipts',
+  'inventoryMovements',
+  'posAuditLogs',
+  'shiftClosings',
+  'spoilage_records',
+  'physical_audits',
+]);
 
 export class FirestoreSyncService {
   private static instance: FirestoreSyncService;
@@ -115,18 +142,30 @@ export class FirestoreSyncService {
     onShiftClosings?: (closings: ShiftClosingRecord[]) => void;
     onSpoilageRecords?: (records: SpoilageRecord[]) => void;
     onPhysicalAudits?: (audits: PhysicalInventoryAudit[]) => void;
-  }): () => void {
+  }, scope: SyncScope): () => void {
     this.cleanup();
     this.updateState({ status: 'syncing' });
+
+    const scopedCollection = (collectionName: string): Query => {
+      const ref = collection(db, collectionName);
+      if (scope.role === 'admin' || GLOBAL_COLLECTIONS.has(collectionName)) return ref;
+      if (collectionName === 'branches') return query(ref, where('id', '==', scope.branchId));
+      if (BRANCH_SCOPED_COLLECTIONS.has(collectionName)) {
+        return query(ref, where('branchId', '==', scope.branchId));
+      }
+      return ref;
+    };
+
+    const branchOnly = scope.role === 'branch';
 
     try {
       // 1. Branches
       if (callbacks.onBranches) {
         const unsub = onSnapshot(
-          collection(db, 'branches'),
+          scopedCollection('branches'),
           (snap) => {
             const data: Branch[] = snap.docs.map((d) => d.data() as Branch);
-            if (data.length > 0) callbacks.onBranches!(data);
+            callbacks.onBranches!(data);
             this.updateState({ status: 'connected', lastSyncedAt: new Date() });
           },
           (err) => {
@@ -138,9 +177,9 @@ export class FirestoreSyncService {
       }
 
       // 1b. Branch Applications
-      if (callbacks.onBranchApplications) {
+      if (callbacks.onBranchApplications && scope.role === 'admin') {
         const unsub = onSnapshot(
-          collection(db, 'branch_applications'),
+          scopedCollection('branch_applications'),
           (snap) => {
             const data: BranchApplication[] = snap.docs.map((d) => d.data() as BranchApplication);
             callbacks.onBranchApplications!(data);
@@ -151,9 +190,9 @@ export class FirestoreSyncService {
       }
 
       // 1c. Branch Documents
-      if (callbacks.onBranchDocuments) {
+      if (callbacks.onBranchDocuments && (scope.role === 'admin' || branchOnly)) {
         const unsub = onSnapshot(
-          collection(db, 'branch_documents'),
+          scopedCollection('branch_documents'),
           (snap) => {
             const data: BranchDocument[] = snap.docs.map((d) => d.data() as BranchDocument);
             callbacks.onBranchDocuments!(data);
@@ -164,9 +203,9 @@ export class FirestoreSyncService {
       }
 
       // 1d. Branch Accounts
-      if (callbacks.onBranchAccounts) {
+      if (callbacks.onBranchAccounts && (scope.role === 'admin' || branchOnly)) {
         const unsub = onSnapshot(
-          collection(db, 'branch_accounts'),
+          scopedCollection('branch_accounts'),
           (snap) => {
             const data: BranchAccount[] = snap.docs.map((d) => d.data() as BranchAccount);
             callbacks.onBranchAccounts!(data);
@@ -177,9 +216,9 @@ export class FirestoreSyncService {
       }
 
       // 1e. Branch Status History
-      if (callbacks.onBranchStatusHistory) {
+      if (callbacks.onBranchStatusHistory && (scope.role === 'admin' || branchOnly)) {
         const unsub = onSnapshot(
-          collection(db, 'branch_status_history'),
+          scopedCollection('branch_status_history'),
           (snap) => {
             const data: BranchStatusHistory[] = snap.docs.map((d) => d.data() as BranchStatusHistory);
             callbacks.onBranchStatusHistory!(data);
@@ -190,9 +229,9 @@ export class FirestoreSyncService {
       }
 
       // 1f. Branch Audit Logs
-      if (callbacks.onBranchAuditLogs) {
+      if (callbacks.onBranchAuditLogs && (scope.role === 'admin' || branchOnly)) {
         const unsub = onSnapshot(
-          collection(db, 'branch_audit_logs'),
+          scopedCollection('branch_audit_logs'),
           (snap) => {
             const data: BranchAuditLog[] = snap.docs.map((d) => d.data() as BranchAuditLog);
             callbacks.onBranchAuditLogs!(data);
@@ -203,12 +242,12 @@ export class FirestoreSyncService {
       }
 
       // 2. Users
-      if (callbacks.onUsers) {
+      if (callbacks.onUsers && scope.role === 'admin') {
         const unsub = onSnapshot(
-          collection(db, 'users'),
+          scopedCollection('users'),
           (snap) => {
             const data: UserModel[] = snap.docs.map((d) => d.data() as UserModel);
-            if (data.length > 0) callbacks.onUsers!(data);
+            callbacks.onUsers!(data);
           },
           (err) => console.warn('[Firestore] Users snapshot error:', err)
         );
@@ -218,10 +257,10 @@ export class FirestoreSyncService {
       // 3. Products
       if (callbacks.onProducts) {
         const unsub = onSnapshot(
-          collection(db, 'products'),
+          scopedCollection('products'),
           (snap) => {
             const data: Product[] = snap.docs.map((d) => d.data() as Product);
-            if (data.length > 0) callbacks.onProducts!(data);
+            callbacks.onProducts!(data);
           },
           (err) => console.warn('[Firestore] Products snapshot error:', err)
         );
@@ -231,7 +270,7 @@ export class FirestoreSyncService {
       // 4. Orders
       if (callbacks.onOrders) {
         const unsub = onSnapshot(
-          collection(db, 'orders'),
+          scopedCollection('orders'),
           (snap) => {
             const data: Order[] = snap.docs.map((d) => d.data() as Order);
             callbacks.onOrders!(data);
@@ -244,7 +283,7 @@ export class FirestoreSyncService {
       // 5. Deliveries
       if (callbacks.onDeliveries) {
         const unsub = onSnapshot(
-          collection(db, 'deliveries'),
+          scopedCollection('deliveries'),
           (snap) => {
             const data: Delivery[] = snap.docs.map((d) => d.data() as Delivery);
             callbacks.onDeliveries!(data);
@@ -257,7 +296,7 @@ export class FirestoreSyncService {
       // 6. Receivings
       if (callbacks.onReceivings) {
         const unsub = onSnapshot(
-          collection(db, 'receivings'),
+          scopedCollection('receivings'),
           (snap) => {
             const data: Receiving[] = snap.docs.map((d) => d.data() as Receiving);
             callbacks.onReceivings!(data);
@@ -270,10 +309,10 @@ export class FirestoreSyncService {
       // 7. Inventory
       if (callbacks.onInventory) {
         const unsub = onSnapshot(
-          collection(db, 'inventory'),
+          scopedCollection('inventory'),
           (snap) => {
             const data: InventoryItem[] = snap.docs.map((d) => d.data() as InventoryItem);
-            if (data.length > 0) callbacks.onInventory!(data);
+            callbacks.onInventory!(data);
           },
           (err) => console.warn('[Firestore] Inventory snapshot error:', err)
         );
@@ -283,10 +322,10 @@ export class FirestoreSyncService {
       // 8. Sales
       if (callbacks.onSales) {
         const unsub = onSnapshot(
-          collection(db, 'sales'),
+          scopedCollection('sales'),
           (snap) => {
             const data: Sale[] = snap.docs.map((d) => d.data() as Sale);
-            if (data.length > 0) callbacks.onSales!(data);
+            callbacks.onSales!(data);
           },
           (err) => console.warn('[Firestore] Sales snapshot error:', err)
         );
@@ -296,10 +335,10 @@ export class FirestoreSyncService {
       // 9. Announcements
       if (callbacks.onAnnouncements) {
         const unsub = onSnapshot(
-          collection(db, 'announcements'),
+          scopedCollection('announcements'),
           (snap) => {
             const data: Announcement[] = snap.docs.map((d) => d.data() as Announcement);
-            if (data.length > 0) callbacks.onAnnouncements!(data);
+            callbacks.onAnnouncements!(data);
           },
           (err) => console.warn('[Firestore] Announcements snapshot error:', err)
         );
@@ -309,10 +348,10 @@ export class FirestoreSyncService {
       // 10. Events
       if (callbacks.onEvents) {
         const unsub = onSnapshot(
-          collection(db, 'events'),
+          scopedCollection('events'),
           (snap) => {
             const data: CalendarEvent[] = snap.docs.map((d) => d.data() as CalendarEvent);
-            if (data.length > 0) callbacks.onEvents!(data);
+            callbacks.onEvents!(data);
           },
           (err) => console.warn('[Firestore] Events snapshot error:', err)
         );
@@ -322,10 +361,10 @@ export class FirestoreSyncService {
       // 11. Production Batches
       if (callbacks.onProductionBatches) {
         const unsub = onSnapshot(
-          collection(db, 'production_batches'),
+          scopedCollection('production_batches'),
           (snap) => {
             const data: ProductionBatch[] = snap.docs.map((d) => d.data() as ProductionBatch);
-            if (data.length > 0) callbacks.onProductionBatches!(data);
+            callbacks.onProductionBatches!(data);
           },
           (err) => console.warn('[Firestore] Production Batches snapshot error:', err)
         );
@@ -335,10 +374,10 @@ export class FirestoreSyncService {
       // 12. BIR Receipts
       if (callbacks.onBirReceipts) {
         const unsub = onSnapshot(
-          collection(db, 'birReceipts'),
+          scopedCollection('birReceipts'),
           (snap) => {
             const data: BIRReceipt[] = snap.docs.map((d) => d.data() as BIRReceipt);
-            if (data.length > 0) callbacks.onBirReceipts!(data);
+            callbacks.onBirReceipts!(data);
           },
           (err) => console.warn('[Firestore] BIR Receipts snapshot error:', err)
         );
@@ -348,10 +387,10 @@ export class FirestoreSyncService {
       // 13. Inventory Movements
       if (callbacks.onInventoryMovements) {
         const unsub = onSnapshot(
-          collection(db, 'inventoryMovements'),
+          scopedCollection('inventoryMovements'),
           (snap) => {
             const data: InventoryMovementRecord[] = snap.docs.map((d) => d.data() as InventoryMovementRecord);
-            if (data.length > 0) callbacks.onInventoryMovements!(data);
+            callbacks.onInventoryMovements!(data);
           },
           (err) => console.warn('[Firestore] Inventory Movements snapshot error:', err)
         );
@@ -361,10 +400,10 @@ export class FirestoreSyncService {
       // 14. POS Audit Logs
       if (callbacks.onPosAuditLogs) {
         const unsub = onSnapshot(
-          collection(db, 'posAuditLogs'),
+          scopedCollection('posAuditLogs'),
           (snap) => {
             const data: POSAuditLog[] = snap.docs.map((d) => d.data() as POSAuditLog);
-            if (data.length > 0) callbacks.onPosAuditLogs!(data);
+            callbacks.onPosAuditLogs!(data);
           },
           (err) => console.warn('[Firestore] POS Audit Logs snapshot error:', err)
         );
@@ -374,10 +413,10 @@ export class FirestoreSyncService {
       // 15. Shift Closings (Z-Readings)
       if (callbacks.onShiftClosings) {
         const unsub = onSnapshot(
-          collection(db, 'shiftClosings'),
+          scopedCollection('shiftClosings'),
           (snap) => {
             const data: ShiftClosingRecord[] = snap.docs.map((d) => d.data() as ShiftClosingRecord);
-            if (data.length > 0) callbacks.onShiftClosings!(data);
+            callbacks.onShiftClosings!(data);
           },
           (err) => console.warn('[Firestore] Shift Closings snapshot error:', err)
         );
@@ -387,10 +426,10 @@ export class FirestoreSyncService {
       // 16. Spoilage Records
       if (callbacks.onSpoilageRecords) {
         const unsub = onSnapshot(
-          collection(db, 'spoilage_records'),
+          scopedCollection('spoilage_records'),
           (snap) => {
             const data: SpoilageRecord[] = snap.docs.map((d) => d.data() as SpoilageRecord);
-            if (data.length > 0) callbacks.onSpoilageRecords!(data);
+            callbacks.onSpoilageRecords!(data);
           },
           (err) => console.warn('[Firestore] Spoilage Records snapshot error:', err)
         );
@@ -400,10 +439,10 @@ export class FirestoreSyncService {
       // 17. Physical Audits
       if (callbacks.onPhysicalAudits) {
         const unsub = onSnapshot(
-          collection(db, 'physical_audits'),
+          scopedCollection('physical_audits'),
           (snap) => {
             const data: PhysicalInventoryAudit[] = snap.docs.map((d) => d.data() as PhysicalInventoryAudit);
-            if (data.length > 0) callbacks.onPhysicalAudits!(data);
+            callbacks.onPhysicalAudits!(data);
           },
           (err) => console.warn('[Firestore] Physical Audits snapshot error:', err)
         );
@@ -430,9 +469,11 @@ export class FirestoreSyncService {
       const ref = doc(db, collectionName, id);
       await setDoc(ref, { ...sanitized, updatedAt: serverTimestamp() }, { merge: true });
       this.updateState({ status: 'connected', lastSyncedAt: new Date() });
-    } catch (err: any) {
-      console.warn(`[Firestore] Sync notice for ${collectionName}/${id} (operating in offline-first mode):`, err?.message || err);
-      this.updateState({ status: 'offline', error: err?.message });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[Firestore] Sync failed for ${collectionName}/${id}:`, message);
+      this.updateState({ status: 'error', error: message });
+      throw err;
     }
   }
 
@@ -442,15 +483,16 @@ export class FirestoreSyncService {
       const ref = doc(db, collectionName, id);
       await deleteDoc(ref);
       this.updateState({ status: 'connected', lastSyncedAt: new Date() });
-    } catch (err: any) {
-      console.warn(`[Firestore] Sync notice for delete ${collectionName}/${id}:`, err?.message || err);
-      this.updateState({ status: 'offline', error: err?.message });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[Firestore] Delete failed for ${collectionName}/${id}:`, message);
+      this.updateState({ status: 'error', error: message });
+      throw err;
     }
   }
 
   // Seed initial dataset if database is brand new
   public async seedInitialDatasetIfEmpty(initialData: {
-    users: UserModel[];
     branches: Branch[];
     products: Product[];
     orders: Order[];
@@ -461,6 +503,11 @@ export class FirestoreSyncService {
     announcements: Announcement[];
     events: CalendarEvent[];
     productionBatches?: ProductionBatch[];
+    branchApplications?: BranchApplication[];
+    branchDocuments?: BranchDocument[];
+    branchAccounts?: BranchAccount[];
+    branchStatusHistory?: BranchStatusHistory[];
+    branchAuditLogs?: BranchAuditLog[];
   }): Promise<void> {
     try {
       const branchesSnap = await getDocs(collection(db, 'branches'));
@@ -476,12 +523,26 @@ export class FirestoreSyncService {
       const batch1 = writeBatch(db);
       initialData.branches.forEach((b) => batch1.set(doc(db, 'branches', b.id), sanitizeForFirestore(b)));
       initialData.products.forEach((p) => batch1.set(doc(db, 'products', p.id), sanitizeForFirestore(p)));
-      initialData.users.forEach((u) => batch1.set(doc(db, 'users', u.id), sanitizeForFirestore(u)));
       initialData.announcements.forEach((a) => batch1.set(doc(db, 'announcements', a.id), sanitizeForFirestore(a)));
       initialData.events.forEach((e) => batch1.set(doc(db, 'events', e.id), sanitizeForFirestore(e)));
       if (initialData.productionBatches) {
         initialData.productionBatches.forEach((pb) => batch1.set(doc(db, 'production_batches', pb.id), sanitizeForFirestore(pb)));
       }
+      initialData.branchApplications?.forEach((application) =>
+        batch1.set(doc(db, 'branch_applications', application.id), sanitizeForFirestore(application))
+      );
+      initialData.branchDocuments?.forEach((document) =>
+        batch1.set(doc(db, 'branch_documents', document.id), sanitizeForFirestore(document))
+      );
+      initialData.branchAccounts?.forEach((account) =>
+        batch1.set(doc(db, 'branch_accounts', account.id), sanitizeForFirestore(account))
+      );
+      initialData.branchStatusHistory?.forEach((history) =>
+        batch1.set(doc(db, 'branch_status_history', history.id), sanitizeForFirestore(history))
+      );
+      initialData.branchAuditLogs?.forEach((log) =>
+        batch1.set(doc(db, 'branch_audit_logs', log.id), sanitizeForFirestore(log))
+      );
       await batch1.commit();
 
       // Batch 2: Orders, Deliveries, Receivings

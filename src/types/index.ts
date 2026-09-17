@@ -34,10 +34,11 @@ export interface UserModel {
   firebaseUid?: string;
   name: string;
   email: string;
-  password?: string;
+  username?: string;
   role: Role | UserRole | RoleType | 'admin' | 'branch' | string;
   branchId?: string;
   branchName?: string;
+  rbacTier?: 'SUPER_ADMIN' | 'BRANCH_MANAGER' | 'BRANCH_STAFF' | string;
 }
 
 export type BranchStatus = 'Active' | 'Pending Activation' | 'Suspended' | 'Inactive' | 'Closed';
@@ -55,6 +56,8 @@ export interface Branch {
   code: string;
   businessType: BranchBusinessType | string;
   location: string;
+  address?: string;
+  city?: string;
   contactNumber: string;
   email: string;
   operatingHours: string;
@@ -138,7 +141,6 @@ export interface BranchAccount {
   branchId: string;
   branchName: string;
   username: string;
-  temporaryPassword: string;
   fullName: string;
   email: string;
   phone?: string;
@@ -167,9 +169,12 @@ export interface BranchAuditLog {
   branchId?: string;
   branchName?: string;
   action: string;
-  user: string;
+  user?: string;
+  userId?: string;
+  performedBy?: string;
   timestamp: string;
-  remarks: string;
+  remarks?: string;
+  details?: string;
   metadata?: Record<string, any>;
 }
 
@@ -177,6 +182,7 @@ export interface Product {
   id: string;
   name: string;
   flavor: string;
+  category?: string;
   price: number; // POS Retail Selling Price (SRP) e.g. ₱149
   wholesalePrice?: number; // Partner Wholesale Ordering Price e.g. ₱100
   adminStock: number;
@@ -187,10 +193,26 @@ export interface OrderItem {
   productName: string;
   quantity: number;
   unitPrice: number;
+  flavor?: string;
 }
 
-export type OrderStatus = 'pending' | 'waitingApproval' | 'approved' | 'rejected' | 'dispatched' | 'completed';
-export type ProductionStage = 'queued' | 'in_kettle' | 'curing' | 'packaged' | 'ready_for_dispatch';
+export type OrderStatus =
+  | 'pending'
+  | 'waitingApproval'
+  | 'approved'
+  | 'rejected'
+  | 'dispatched'
+  | 'completed'
+  | 'canceled'
+  | 'in_production';
+export type ProductionStage =
+  | 'queued'
+  | 'in_kettle'
+  | 'curing'
+  | 'packaging'
+  | 'packaged'
+  | 'ready_for_dispatch'
+  | 'in_production';
 
 export type DispatchMethod = 'company_driver' | 'third_party_courier' | 'jt_express';
 
@@ -309,7 +331,7 @@ export interface PhysicalInventoryAudit {
   reconciledBy?: string;
 }
 
-export type BatchStage = 'in_kettle' | 'curing' | 'packaged' | 'completed';
+export type BatchStage = 'in_kettle' | 'curing' | 'packaging' | 'packaged' | 'completed' | 'in_production';
 
 export interface ProductionBatch {
   id: string;
@@ -389,7 +411,8 @@ export interface Delivery {
   id: string;
   orderId: string;
   branchId: string;
-  address: string;
+  address?: string;
+  destinationAddress?: string;
   status: DeliveryStatus;
   scheduledAt: string;
   deliveredAt?: string;
@@ -399,10 +422,12 @@ export interface Delivery {
   waybillNumber?: string;
   jtSortingCode?: string;
   driverName?: string;
+  driverPhone?: string;
   vehiclePlateNo?: string;
   receiverContact?: string;
   receiverPhone?: string;
   weightKg?: number;
+  estimatedDeliveryTime?: string;
   notes?: string;
 }
 
@@ -412,9 +437,16 @@ export interface InterBranchTransfer {
   sourceBranchName: string;
   targetBranchId: string;
   targetBranchName: string;
-  targetAddress: string;
+  fromBranchId?: string;
+  fromBranchName?: string;
+  toBranchId?: string;
+  toBranchName?: string;
+  targetAddress?: string;
   items: { productId: string; productName: string; quantity: number }[];
-  status: 'pending' | 'approved' | 'in_transit' | 'received' | 'rejected' | 'canceled';
+  productId?: string;
+  productName?: string;
+  quantity?: number;
+  status: 'pending' | 'pending_approval' | 'approved' | 'in_transit' | 'received' | 'rejected' | 'canceled' | 'completed' | 'dispatched';
   dispatchMethod?: DispatchMethod;
   courierName?: string;
   waybillNumber?: string;
@@ -423,8 +455,11 @@ export interface InterBranchTransfer {
   driverName?: string;
   vehiclePlateNo?: string;
   reason?: string;
+  requestedBy?: string;
   createdAt: string;
+  approvedAt?: string;
   dispatchedAt?: string;
+  completedAt?: string;
   receivedAt?: string;
   notes?: string;
 }
@@ -450,6 +485,8 @@ export interface InventoryItem {
   productId: string;
   productName: string;
   stock: number;
+  currentStock?: number;
+  minThreshold?: number;
 }
 
 export interface RestockSuggestion {
@@ -459,7 +496,7 @@ export interface RestockSuggestion {
   averageDailyQuantity: number;
   expectedWeeklyDemand: number;
   suggestedOrderQuantity: number;
-  urgency: 'Urgent' | 'Review' | 'Monitor';
+  urgency: 'Urgent' | 'Review' | 'Monitor' | 'Optimal';
 }
 
 export interface Sale {
@@ -472,13 +509,16 @@ export interface Sale {
   date: string;
   receiptPath?: string;
   paymentMethod?: 'Cash' | 'GCash' | 'Maya' | 'Card' | 'Split Payment' | string;
+  paymentReference?: string;
+  userId?: string;
+  sku?: string;
   amountTendered?: number;
   change?: number;
   discountAmount?: number;
   discountType?: string;
   customerName?: string;
   cashierName?: string;
-  source?: 'VertexIS POS' | 'Offline Batch Import' | string;
+  source?: 'VertexIS POS' | 'Offline Batch Import' | 'Manual Sales Entry' | string;
   status?: 'completed' | 'voided' | 'refunded';
 }
 
@@ -509,6 +549,7 @@ export interface POSSeniorPwdDetail {
   customerName: string;
   type: 'Senior Citizen' | 'PWD';
   bookletNumber?: string;
+  tin?: string;
 }
 
 export interface POSTransactionItem {
@@ -719,21 +760,30 @@ export interface ProductDemandAnalytics {
   productId: string;
   productName: string;
   flavor: string;
-  unitPrice: number;
-  wholesalePrice: number;
+  unitPrice?: number;
+  wholesalePrice?: number;
   currentStock: number;
   inTransitStock: number;
-  dailyHistoricalSales: number[];
-  alpha: number; // 0.3
+  dailyHistoricalSales?: number[];
+  alpha?: number; // 0.3
   smoothedDailyDemand: number;
-  baselineDemand: number;
+  baselineDemand?: number;
   expectedWeeklyDemand: number;
-  recommendedSafetyStock: number;
-  leadTimeDays: number;
+  recommendedSafetyStock?: number;
+  leadTimeDays?: number;
   suggestedOrderQuantity: number;
-  urgency: 'Urgent' | 'Review' | 'Monitor';
-  daysOfInventoryLeft: number;
-  velocityTrend: 'Rising' | 'Steady' | 'Declining';
+  urgency: 'Urgent' | 'Review' | 'Monitor' | 'Optimal';
+  daysOfInventoryLeft?: number;
+  velocityTrend?: 'Rising' | 'Steady' | 'Declining';
+  totalHistoricalSalesUnits?: number;
+  salesTransactionsCount?: number;
+  rawAverageDailySales?: number;
+  isolatedWastageUnits?: number;
+  isolatedWastageCost?: number;
+  spoilageIsolationVerified?: boolean;
+  safetyStockBuffer?: number;
+  stockoutRiskPercentage?: number;
+  estimatedDepletionDays?: number;
 }
 
 // ----------------------------------------------------
@@ -754,12 +804,15 @@ export interface DailyPhysicalCountItem {
 }
 
 export interface DailyManualSalesItem {
+  id?: string;
   productId: string;
   productName: string;
   flavor: string;
   unitsSold: number;
   unitPrice: number;
-  totalSales: number;
+  totalSales?: number;
+  totalAmount?: number;
+  loggedAt?: string;
 }
 
 export interface DailySpoilageItem {
@@ -785,6 +838,12 @@ export interface DailyInboundReceivingItem {
   condition: 'good' | 'damaged' | 'shortage' | 'overage';
   verifiedAt: string;
   notes?: string;
+  damageProof?: {
+    fileName: string;
+    fileType: string;
+    fileSize: string;
+    dataUrl: string;
+  };
 }
 
 export interface DailyShiftLog {
@@ -793,25 +852,30 @@ export interface DailyShiftLog {
   branchId: string;
   branchName: string;
   status: DailyLogStatus | DailyLogStatusType;
+  shiftType?: 'regular' | 'opening' | 'closing';
   physicalCounts: DailyPhysicalCountItem[];
   manualSales: DailyManualSalesItem[];
   spoilageEntries: DailySpoilageItem[];
   inboundReceiving: DailyInboundReceivingItem[];
   submittedBy?: string;
   submittedById?: string;
+  submittedByStaffId?: string;
+  submittedByStaffName?: string;
   submittedAt?: string;
   validatedBy?: string;
   validatedById?: string;
+  validatedByManagerId?: string;
+  validatedByManagerName?: string;
   validatedAt?: string;
   lockedAt?: string;
   managerNotes?: string;
   rejectionReason?: string;
   rejectedBy?: string;
   rejectedAt?: string;
-  totalSalesUnits: number;
-  totalSalesRevenue: number;
-  totalSpoilageUnits: number;
-  totalSpoilageCost: number;
+  createdAt?: string;
+  updatedAt?: string;
+  totalSalesUnits?: number;
+  totalSalesRevenue?: number;
+  totalSpoilageUnits?: number;
+  totalSpoilageCost?: number;
 }
-
-

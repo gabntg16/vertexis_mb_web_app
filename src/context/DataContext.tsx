@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import { doc, runTransaction } from 'firebase/firestore';
 import {
   UserModel,
   Branch,
@@ -47,6 +48,10 @@ import {
   PhysicalAuditItem,
   PhysicalInventoryAudit,
   Role,
+  DigitalPaymentMethod,
+  PaymentGatewayStatus,
+  DispatchMethod,
+  OrderItem,
   DailyLogStatus,
   DailyShiftLog,
   DailyPhysicalCountItem,
@@ -62,12 +67,16 @@ import {
 } from '../data/initialDailyShiftData';
 import { firestoreSync, SyncState } from '../services/firestoreSync';
 import { auth } from '../lib/firebase';
+import { db } from '../lib/firebase';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { resolveMyProfile } from '../services/accountProvisioning';
+import { provisionUser, resetUserPassword } from '../services/accountProvisioning';
 import {
   idempotencyManager,
   validateStateTransition,
   generateClientRequestId,
 } from '../utils/idempotency';
+import { validateMTOStageTransition } from '../utils/securityValidator';
 import {
   INITIAL_ENHANCED_BRANCHES,
   INITIAL_BRANCH_APPLICATIONS,
@@ -463,7 +472,6 @@ interface DataContextType {
   currentBranch: Branch | null;
   syncState: SyncState;
   toggleTheme: () => void;
-  login: (email: string, pass: string) => UserModel | null;
   loginWithFirebase: (email: string, pass: string) => Promise<UserModel>;
   logout: () => void;
   switchUser: (userId: string) => void;
@@ -483,7 +491,13 @@ interface DataContextType {
   }) => BranchApplication;
   updateApplicationStatus: (applicationId: string, status: ApplicationStatus, notes?: string, remarks?: string) => void;
   verifyDocument: (docId: string, status: DocumentVerificationStatus, remarks?: string) => void;
-  approveBranchApplication: (applicationId: string) => { branch: Branch; managerAccount: BranchAccount; staffAccount: BranchAccount } | null;
+  approveBranchApplication: (applicationId: string) => Promise<{
+    branch: Branch;
+    managerAccount: BranchAccount;
+    staffAccount: BranchAccount;
+    managerPasswordResetLink?: string;
+    staffPasswordResetLink?: string;
+  } | null>;
   rejectBranchApplication: (applicationId: string, reason: string) => void;
   requestDocumentResubmission: (applicationId: string, docId: string, reason: string) => void;
   uploadDocument: (doc: Omit<BranchDocument, 'id' | 'status' | 'uploadedAt'> & { status?: DocumentVerificationStatus }) => BranchDocument;
@@ -508,11 +522,11 @@ interface DataContextType {
     role: BranchAccountRole;
     phone?: string;
     permissions?: string[];
-  }) => BranchAccount;
+  }) => Promise<BranchAccount>;
   updateBranchAccount: (account: BranchAccount) => void;
-  resetBranchAccountPassword: (accountId: string) => { temporaryPassword: string };
+  resetBranchAccountPassword: (accountId: string) => void;
   toggleBranchAccountActive: (accountId: string, isActive: boolean) => void;
-  sendAccountCredentials: (accountId: string) => boolean;
+  sendAccountCredentials: (accountId: string) => Promise<{ success: boolean; passwordResetLink?: string }>;
   logBranchAudit: (action: string, remarks: string, branchId?: string, branchName?: string, metadata?: Record<string, any>) => BranchAuditLog;
   getApplicationDocuments: (appId: string) => BranchDocument[];
   getBranchDocuments: (branchId: string) => BranchDocument[];
@@ -573,6 +587,7 @@ interface DataContextType {
       waybillNumber?: string;
       jtSortingCode?: string;
       driverName?: string;
+      driverPhone?: string;
       vehiclePlateNo?: string;
       receiverContact?: string;
       receiverPhone?: string;
@@ -589,6 +604,12 @@ interface DataContextType {
   createReceivingInspection: (deliveryId: string, orderId: string, status: ReceivingStatus, receiverName: string, conditionNotes: string) => void;
   updateStock: (inventoryId: string, newStock: number) => void;
   recordSale: (productId: string, quantity: number, customTotal?: number, date?: string, receiptPath?: string) => void;
+  submitManualSale: (payload: {
+    productId: string;
+    quantity: number;
+    paymentMethod: 'Cash' | 'GCash' | 'Bank Transfer';
+    paymentReference?: string;
+  }) => Promise<{ success: boolean; sale?: Sale; error?: string }>;
   recordMultiItemSale: (payload: {
     items: { productId: string; quantity: number; unitPrice: number }[];
     paymentMethod: 'Cash' | 'GCash' | 'Maya' | 'Card' | string;
@@ -834,7 +855,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 3-Tier RBAC Shift Logs & Lateral Transfers State
   const [dailyShiftLogs, setDailyShiftLogs] = useState<DailyShiftLog[]>(() =>
-    generateInitialDailyShiftLogs(INITIAL_BRANCHES, INITIAL_PRODUCTS)
+    generateInitialDailyShiftLogs()
   );
   const [interBranchTransfers, setInterBranchTransfers] = useState<InterBranchTransfer[]>(() =>
     generateInitialInterBranchTransfers()
@@ -845,20 +866,32 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [syncState, setSyncState] = useState<SyncState>({ status: 'syncing', lastSyncedAt: null });
 
   useEffect(() => {
-    return onAuthStateChanged(auth, (firebaseUser) => {
+    let cancelled = false;
+    let profileRequest = 0;
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      const requestId = ++profileRequest;
       if (!firebaseUser?.email) {
         setCurrentUser(null);
         return;
       }
 
-      const found = users.find(
-        (user) =>
-          user.firebaseUid === firebaseUser.uid ||
-          user.email?.toLowerCase() === firebaseUser.email!.toLowerCase()
-      );
-      setCurrentUser(found || null);
+      void resolveMyProfile()
+        .then((profile) => {
+          if (!cancelled && requestId === profileRequest) setCurrentUser(profile);
+        })
+        .catch((error: unknown) => {
+          if (!cancelled && requestId === profileRequest) {
+            console.warn('[Auth] Could not resolve VertexIS profile:', error);
+            setCurrentUser(null);
+          }
+        });
     });
-  }, [users]);
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   // 1. Listen for Firestore sync state changes
   useEffect(() => {
@@ -903,55 +936,70 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Could not parse localStorage data', e);
     }
 
-    // Subscribe to Firestore collections
+    if (!auth.currentUser || !currentUser) return;
+
+    const isAdmin = currentUser.role === 'admin' || currentUser.role === Role.SUPER_ADMIN;
+    if (!isAdmin) {
+      setUsers([currentUser]);
+      setBranchApplications([]);
+    }
+
+    // Subscribe to Firestore collections within the authenticated user's claim scope.
+    const scope = isAdmin
+      ? { role: 'admin' as const }
+      : currentUser.branchId
+      ? { role: 'branch' as const, branchId: currentUser.branchId, userId: auth.currentUser.uid }
+      : null;
+    if (!scope) return;
+
     const unsubFirestore = firestoreSync.subscribeAll({
-      onBranches: (b) => { if (b.length > 0) setBranches(b); },
-      onUsers: (u) => { if (u.length > 0) setUsers(u); },
-      onProducts: (p) => { if (p.length > 0) setProducts(p); },
+      onBranches: (b) => setBranches(b),
+      onUsers: (u) => setUsers(u),
+      onProducts: (p) => setProducts(p),
       onOrders: (o) => setOrders(o),
       onDeliveries: (d) => setDeliveries(d),
       onReceivings: (r) => setReceivings(r),
-      onInventory: (i) => { if (i.length > 0) setInventory(i); },
+      onInventory: (i) => setInventory(i),
       onSales: (s) => setSales(s),
-      onAnnouncements: (a) => { if (a.length > 0) setAnnouncements(a); },
-      onEvents: (e) => { if (e.length > 0) setEvents(e); },
-      onProductionBatches: (pb) => { if (pb.length > 0) setProductionBatches(pb); },
-      onBranchApplications: (ba) => { if (ba.length > 0) setBranchApplications(ba); },
-      onBranchDocuments: (bd) => { if (bd.length > 0) setBranchDocuments(bd); },
-      onBranchAccounts: (bac) => { if (bac.length > 0) setBranchAccounts(bac); },
-      onBranchStatusHistory: (bsh) => { if (bsh.length > 0) setBranchStatusHistory(bsh); },
-      onBranchAuditLogs: (bal) => { if (bal.length > 0) setBranchAuditLogs(bal); },
-      onBirReceipts: (rec) => { if (rec.length > 0) setBirReceipts(rec); },
-      onInventoryMovements: (mov) => { if (mov.length > 0) setInventoryMovements(mov); },
-      onPosAuditLogs: (logs) => { if (logs.length > 0) setPosAuditLogs(logs); },
-      onShiftClosings: (sc) => { if (sc.length > 0) setShiftClosings(sc); },
-      onSpoilageRecords: (records) => { if (records.length > 0) setSpoilageRecords(records); },
-      onPhysicalAudits: (audits) => { if (audits.length > 0) setPhysicalAudits(audits); },
-    });
+      onAnnouncements: (a) => setAnnouncements(a),
+      onEvents: (e) => setEvents(e),
+      onProductionBatches: (pb) => setProductionBatches(pb),
+      onBranchApplications: (ba) => setBranchApplications(ba),
+      onBranchDocuments: (bd) => setBranchDocuments(bd),
+      onBranchAccounts: (bac) => setBranchAccounts(bac),
+      onBranchStatusHistory: (bsh) => setBranchStatusHistory(bsh),
+      onBranchAuditLogs: (bal) => setBranchAuditLogs(bal),
+      onBirReceipts: (rec) => setBirReceipts(rec),
+      onInventoryMovements: (mov) => setInventoryMovements(mov),
+      onPosAuditLogs: (logs) => setPosAuditLogs(logs),
+      onShiftClosings: (sc) => setShiftClosings(sc),
+      onSpoilageRecords: (records) => setSpoilageRecords(records),
+      onPhysicalAudits: (audits) => setPhysicalAudits(audits),
+    }, scope);
 
-    // Seed database if empty
-    firestoreSync.seedInitialDatasetIfEmpty({
-      users: generateInitialUsers(),
-      branches: INITIAL_BRANCHES,
-      products: INITIAL_PRODUCTS,
-      orders: generateInitialOrders(),
-      deliveries: generateInitialDeliveries(),
-      receivings: generateInitialReceivings(),
-      inventory: generateInitialInventory(),
-      sales: generateInitialSales(),
-      announcements: generateInitialAnnouncements(),
-      events: generateInitialEvents(),
-      productionBatches: generateInitialProductionBatches(),
-      branchApplications: INITIAL_BRANCH_APPLICATIONS,
-      branchAccounts: INITIAL_BRANCH_ACCOUNTS,
-      branchStatusHistory: INITIAL_BRANCH_STATUS_HISTORY,
-      branchAuditLogs: INITIAL_BRANCH_AUDIT_LOGS,
-    });
+    if (isAdmin) {
+      void firestoreSync.seedInitialDatasetIfEmpty({
+        branches: INITIAL_BRANCHES,
+        products: INITIAL_PRODUCTS,
+        orders: generateInitialOrders(),
+        deliveries: generateInitialDeliveries(),
+        receivings: generateInitialReceivings(),
+        inventory: generateInitialInventory(),
+        sales: generateInitialSales(),
+        announcements: generateInitialAnnouncements(),
+        events: generateInitialEvents(),
+        productionBatches: generateInitialProductionBatches(),
+        branchApplications: INITIAL_BRANCH_APPLICATIONS,
+        branchAccounts: INITIAL_BRANCH_ACCOUNTS,
+        branchStatusHistory: INITIAL_BRANCH_STATUS_HISTORY,
+        branchAuditLogs: INITIAL_BRANCH_AUDIT_LOGS,
+      });
+    }
 
     return () => {
       unsubFirestore();
     };
-  }, []);
+  }, [currentUser?.id, currentUser?.role, currentUser?.branchId]);
 
   // 3. Cache to LocalStorage on state change
   useEffect(() => {
@@ -1034,54 +1082,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setThemeMode((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  const login = (email: string, pass: string): UserModel | null => {
-    const cleanEmail = email.trim().toLowerCase();
-    const found = users.find(
-      (u) =>
-        (u.email?.toLowerCase() === cleanEmail || u.username?.toLowerCase() === cleanEmail) &&
-        u.password === pass
-    );
-    if (found) {
-      setCurrentUser(found);
-      return found;
-    }
-    return null;
-  };
-
   const logout = () => {
     setCurrentUser(null);
     void signOut(auth);
   };
 
   const loginWithFirebase = async (email: string, pass: string): Promise<UserModel> => {
-    const credential = await signInWithEmailAndPassword(auth, email.trim(), pass);
-    const found = users.find(
-      (user) =>
-        user.firebaseUid === credential.user.uid ||
-        user.email?.toLowerCase() === credential.user.email?.toLowerCase()
-    );
-
-    if (!found) {
+    await signInWithEmailAndPassword(auth, email.trim(), pass);
+    try {
+      const profile = await resolveMyProfile();
+      setCurrentUser(profile);
+      return profile;
+    } catch (error) {
       await signOut(auth);
-      throw new Error(
-        `No VertexIS profile is linked to ${credential.user.email || 'this Firebase account'}. Ask an administrator to create a matching user profile or link this Firebase UID.`
-      );
+      throw error;
     }
-
-    const linkedProfile = found.firebaseUid === credential.user.uid
-      ? found
-      : { ...found, firebaseUid: credential.user.uid };
-
-    if (linkedProfile !== found) {
-      setUsers((prev) => prev.map((user) => (user.id === found.id ? linkedProfile : user)));
-      await firestoreSync.saveDoc('users', linkedProfile.id, linkedProfile);
-    }
-
-    setCurrentUser(linkedProfile);
-    return linkedProfile;
   };
 
   const switchUser = (userId: string) => {
+    if (!import.meta.env.DEV) return;
     const u = users.find((x) => x.id === userId);
     if (u) {
       setCurrentUser(u);
@@ -1385,7 +1404,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const approveBranchApplication = useCallback(
-    (applicationId: string): { branch: Branch; managerAccount: BranchAccount; staffAccount: BranchAccount } | null => {
+    async (applicationId: string): Promise<{
+      branch: Branch;
+      managerAccount: BranchAccount;
+      staffAccount: BranchAccount;
+      managerPasswordResetLink?: string;
+      staffPasswordResetLink?: string;
+    } | null> => {
       const app = branchApplications.find((a) => a.id === applicationId);
       if (!app) return null;
       if (app.status === 'Approved' || app.approvedBranchId) {
@@ -1424,23 +1449,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       // 2. Create Branch Manager user & account
-      const managerTempPassword = `MB-${app.branchCode.replace(/[^A-Za-z0-9]/g, '')}-${Math.floor(1000 + Math.random() * 9000)}!`;
-      const managerUsername = `${slug}.mgr`;
-      const managerUser: UserModel = {
-        id: `u-${branchId}`,
-        name: `${app.managerName} (${app.branchName} Manager)`,
-        email: app.managerEmail || `${slug}@marshbites.com`,
-        password: managerTempPassword,
-        role: 'branch',
-        branchId,
-      };
-
-      const managerAccount: BranchAccount = {
+      const managerAccountDraft: BranchAccount = {
         id: `acc-${branchId}-mgr`,
         branchId,
         branchName: app.branchName,
-        username: managerUsername,
-        temporaryPassword: managerTempPassword,
+        username: `${slug}.mgr`,
         fullName: app.managerName,
         email: app.managerEmail || `${slug}@marshbites.com`,
         phone: app.managerPhone,
@@ -1452,14 +1465,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       // 3. Create Staff account
-      const staffTempPassword = `MB-Staff-${Math.floor(1000 + Math.random() * 9000)}`;
       const staffUsername = `${slug}.staff1`;
-      const staffAccount: BranchAccount = {
+      const staffAccountDraft: BranchAccount = {
         id: `acc-${branchId}-staff1`,
         branchId,
         branchName: app.branchName,
         username: staffUsername,
-        temporaryPassword: staffTempPassword,
         fullName: `${app.branchName} Counter Staff`,
         email: `staff.${slug}@marshbites.com`,
         role: 'Staff',
@@ -1467,6 +1478,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isActive: true,
         credentialsSent: false,
         createdAt: now,
+      };
+
+      const [managerProvision, staffProvision] = await Promise.all([
+        provisionUser({
+          name: `${app.managerName} (${app.branchName} Manager)`,
+          email: app.managerEmail || `${slug}@marshbites.com`,
+          role: 'branch',
+          branchId,
+          branchRole: 'Branch Manager',
+          phone: app.managerPhone,
+        }),
+        provisionUser({
+          name: `${app.branchName} Counter Staff`,
+          email: `staff.${slug}@marshbites.com`,
+          role: 'branch',
+          branchId,
+          branchRole: 'Staff',
+        }),
+      ]);
+      const managerUser = managerProvision.user;
+      const managerAccount: BranchAccount = {
+        ...managerAccountDraft,
+        id: managerProvision.accountId || managerAccountDraft.id,
+      };
+      const staffAccount: BranchAccount = {
+        ...staffAccountDraft,
+        id: staffProvision.accountId || staffAccountDraft.id,
       };
 
       // 4. Initialize Branch Inventory for all products (0 stock)
@@ -1510,7 +1548,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Firestore Writes
       firestoreSync.saveDoc('branches', newBranch.id, newBranch);
-      firestoreSync.saveDoc('users', managerUser.id, managerUser);
       firestoreSync.saveDoc('branch_accounts', managerAccount.id, managerAccount);
       firestoreSync.saveDoc('branch_accounts', staffAccount.id, staffAccount);
       firestoreSync.saveDoc('branch_applications', updatedApp.id, updatedApp);
@@ -1524,9 +1561,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         newBranch.name
       );
 
-      return { branch: newBranch, managerAccount, staffAccount };
+      return {
+        branch: newBranch,
+        managerAccount,
+        staffAccount,
+        managerPasswordResetLink: managerProvision.passwordResetLink,
+        staffPasswordResetLink: staffProvision.passwordResetLink,
+      };
     },
-    [branchApplications, branches, products, currentUser, logBranchAudit]
+    [branchApplications, branches, products, currentUser, logBranchAudit, provisionUser]
   );
 
   const setBranchStatus = useCallback(
@@ -1719,7 +1762,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setInventory((prev) => prev.filter((i) => i.branchId !== branchId));
 
       firestoreSync.removeDoc('branches', branchId);
-      firestoreSync.removeDoc('users', `u-${branchId}`);
       inventory.filter((i) => i.branchId === branchId).forEach((i) => firestoreSync.removeDoc('inventory', i.id));
       branchAccounts.filter((a) => a.branchId === branchId).forEach((a) => firestoreSync.removeDoc('branch_accounts', a.id));
 
@@ -1752,21 +1794,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const createBranchAccount = useCallback(
-    (payload: {
+    async (payload: {
       branchId: string;
       fullName: string;
       email: string;
       role: BranchAccountRole;
       phone?: string;
       permissions?: string[];
-    }): BranchAccount => {
+    }): Promise<BranchAccount> => {
       const branch = branches.find((b) => b.id === payload.branchId);
       const branchName = branch?.name || 'Branch';
       const slug = (branch?.name || payload.fullName).toLowerCase().replace(/[^a-z0-9]+/g, '-');
       const roleSlug = payload.role.toLowerCase().replace(/[^a-z0-9]+/g, '');
       const username = `${slug}.${roleSlug}-${Math.floor(10 + Math.random() * 90)}`;
-      const temporaryPassword = `MB-${roleSlug.toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}!`;
-
       const defaultPermissions =
         payload.permissions ||
         (payload.role === 'Branch Manager'
@@ -1777,12 +1817,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ? ['Inventory Management', 'Quality Receiving Inspections', 'Stock Replenishment Logs']
           : ['Inventory Management', 'Order Processing', 'Sales Recording & POS']);
 
+      const provisioned = await provisionUser({
+        name: payload.fullName,
+        email: payload.email,
+        role: 'branch',
+        branchId: payload.branchId,
+        branchRole: payload.role,
+        phone: payload.phone,
+      });
+
       const newAcc: BranchAccount = {
-        id: `acc-${Date.now()}`,
+        id: provisioned.accountId || `acc-${Date.now()}`,
         branchId: payload.branchId,
         branchName,
         username,
-        temporaryPassword,
         fullName: payload.fullName,
         email: payload.email,
         phone: payload.phone,
@@ -1794,18 +1842,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       setBranchAccounts((prev) => [...prev, newAcc]);
-      firestoreSync.saveDoc('branch_accounts', newAcc.id, newAcc);
-
-      const newUserModel: UserModel = {
-        id: `u-${newAcc.id}`,
-        name: `${payload.fullName} (${branchName} ${payload.role})`,
-        email: payload.email,
-        password: temporaryPassword,
-        role: 'branch',
-        branchId: payload.branchId,
-      };
-      setUsers((prev) => [...prev, newUserModel]);
-      firestoreSync.saveDoc('users', newUserModel.id, newUserModel);
+      setUsers((prev) => [...prev, provisioned.user]);
 
       logBranchAudit(
         'Staff Account Created',
@@ -1830,11 +1867,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const resetBranchAccountPassword = useCallback(
     (accountId: string) => {
-      const temporaryPassword = `MB-Reset-${Math.floor(1000 + Math.random() * 9000)}!`;
       setBranchAccounts((prev) =>
         prev.map((a) => {
           if (a.id === accountId) {
-            const u = { ...a, temporaryPassword, credentialsSent: false };
+            const u = { ...a, credentialsSent: false };
             firestoreSync.saveDoc('branch_accounts', u.id, u);
             return u;
           }
@@ -1844,20 +1880,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const acc = branchAccounts.find((a) => a.id === accountId);
       if (acc) {
-        setUsers((prev) =>
-          prev.map((u) => {
-            if (u.email.toLowerCase() === acc.email.toLowerCase()) {
-              const updated = { ...u, password: temporaryPassword };
-              firestoreSync.saveDoc('users', updated.id, updated);
-              return updated;
-            }
-            return u;
-          })
-        );
         logBranchAudit('Password Reset', `Generated new temporary credentials for ${acc.fullName} (${acc.username})`, acc.branchId, acc.branchName);
       }
 
-      return { temporaryPassword };
+      return;
     },
     [branchAccounts, logBranchAudit]
   );
@@ -1875,7 +1901,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   }, []);
 
-  const sendAccountCredentials = useCallback((accountId: string): boolean => {
+  const sendAccountCredentials = useCallback(async (accountId: string): Promise<{ success: boolean; passwordResetLink?: string }> => {
+    const resetResult = await resetUserPassword(accountId);
     const now = new Date().toISOString();
     setBranchAccounts((prev) =>
       prev.map((a) => {
@@ -1887,7 +1914,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return a;
       })
     );
-    return true;
+    return { success: true, passwordResetLink: resetResult.passwordResetLink };
   }, []);
 
   const getApplicationDocuments = useCallback(
@@ -1976,7 +2003,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: `u-${branchId}`,
       name: managerName || `${cleanName} Manager`,
       email: managerEmail || `${slug}@marshbites.com`,
-      password: 'branch123',
       role: 'branch',
       branchId,
     };
@@ -1986,7 +2012,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       branchId,
       branchName: cleanName,
       username: `${slug}.mgr`,
-      temporaryPassword: 'branch123',
       fullName: managerName || `${cleanName} Manager`,
       email: managerEmail || `${slug}@marshbites.com`,
       phone: managerPhone || '+63 917 555 0100',
@@ -2012,7 +2037,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Firestore writes
     firestoreSync.saveDoc('branches', newBranch.id, newBranch);
-    firestoreSync.saveDoc('users', newManager.id, newManager);
     firestoreSync.saveDoc('branch_accounts', newManagerAccount.id, newManagerAccount);
     newInvItems.forEach((item) => firestoreSync.saveDoc('inventory', item.id, item));
 
@@ -2214,6 +2238,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error(`Cannot update production stage for a ${targetOrder.status} order.`);
     }
 
+    const stageValidation = validateMTOStageTransition(targetOrder.productionStage || 'queued', stage);
+    if (!stageValidation.valid) throw new Error(stageValidation.error);
+
     if (stage !== 'queued') {
       if (targetOrder.status !== 'approved' || !targetOrder.proofImagePath || targetOrder.proofImagePath.trim() === '') {
         console.warn(`[DataContext] Cannot advance MTO stage for order ${orderId}: Order must be approved with verified payment proof.`);
@@ -2258,11 +2285,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       firestoreSync.saveDoc('announcements', newAnn.id, newAnn);
 
       logBranchAudit(
-        targetOrder.branchId,
-        targetOrder.branchName,
         'ORDER_READY_FOR_DISPATCH',
-        currentUser?.name || 'Central Commissary',
-        `Order #${orderId} marked Ready for Delivery Dispatch. Orders & Approvals and Logistics notified.`
+        `Order #${orderId} marked Ready for Delivery Dispatch. Orders & Approvals and Logistics notified.`,
+        targetOrder.branchId,
+        targetOrder.branchName
       );
     }
   };
@@ -2657,7 +2683,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           branchId: targetOrder.branchId,
           productId: item.productId,
           productName: prodName,
-          type: 'Commissary Stock-In',
+          type: 'Stock In',
           quantity: item.quantity,
           previousStock: prevStock,
           newStock,
@@ -2791,6 +2817,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       waybillNumber?: string;
       jtSortingCode?: string;
       driverName?: string;
+      driverPhone?: string;
       vehiclePlateNo?: string;
       receiverContact?: string;
       receiverPhone?: string;
@@ -2896,11 +2923,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (order) {
         logBranchAudit(
-          order.branchId,
-          order.branchName,
           'ORDER_DISPATCHED',
-          currentUser?.name || 'Central Logistics Fleet',
-          `Order #${orderId} dispatched via ${newDelivery.courierName}. Waybill: ${newDelivery.trackingNumber}.`
+          `Order #${orderId} dispatched via ${newDelivery.courierName}. Waybill: ${newDelivery.trackingNumber}.`,
+          order.branchId,
+          order.branchName
         );
       }
 
@@ -2953,11 +2979,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (ord) {
           logBranchAudit(
-            ord.branchId,
-            ord.branchName,
             'DELIVERY_CONFIRMED',
-            currentUser?.name || 'Central Logistics Fleet',
-            `Delivery for Order #${targetDel.orderId} confirmed delivered.`
+            `Delivery for Order #${targetDel.orderId} confirmed delivered.`,
+            ord.branchId,
+            ord.branchName
           );
         }
       }
@@ -3134,7 +3159,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               branchId: targetBranchId,
               productId: item.productId,
               productName: prodName,
-              type: 'Commissary Stock-In',
+              type: 'Stock In',
               quantity: item.quantity,
               previousStock: prevStock,
               newStock,
@@ -3236,6 +3261,95 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setSales((prev) => [newSale, ...prev]);
     firestoreSync.saveDoc('sales', newSale.id, newSale);
+  };
+
+  const submitManualSale = async (payload: {
+    productId: string;
+    quantity: number;
+    paymentMethod: 'Cash' | 'GCash' | 'Bank Transfer';
+    paymentReference?: string;
+  }): Promise<{ success: boolean; sale?: Sale; error?: string }> => {
+    if (!currentUser?.branchId) {
+      return { success: false, error: 'You must be assigned to a branch to record a sale.' };
+    }
+
+    const quantity = Math.floor(Number(payload.quantity));
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      return { success: false, error: 'Quantity sold must be a whole number greater than zero.' };
+    }
+
+    const product = products.find((item) => item.id === payload.productId);
+    const inventoryItem = inventory.find(
+      (item) => item.branchId === currentUser.branchId && item.productId === payload.productId
+    );
+    const availableStock = inventoryItem?.stock ?? 0;
+
+    if (!product || !inventoryItem) {
+      return { success: false, error: 'The selected product is not available in this branch inventory.' };
+    }
+    if (quantity > availableStock) {
+      return {
+        success: false,
+        error: `Insufficient stock for ${product.flavor}. Available: ${availableStock} units.`,
+      };
+    }
+    if (payload.paymentMethod !== 'Cash' && !payload.paymentReference?.trim()) {
+      return { success: false, error: 'A payment reference is required for digital payments.' };
+    }
+
+    const saleId = `manual-sale-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    const saleDate = new Date().toISOString();
+    const normalizedPaymentReference = payload.paymentReference?.trim();
+    const sale: Sale = {
+      id: saleId,
+      branchId: currentUser.branchId,
+      productId: product.id,
+      sku: product.id,
+      productName: `${product.flavor} (${product.name})`,
+      quantity,
+      total: quantity * product.price,
+      date: saleDate,
+      paymentMethod: payload.paymentMethod,
+      userId: currentUser.id,
+      cashierName: currentUser.name,
+      source: 'Manual Sales Entry',
+      ...(normalizedPaymentReference ? { paymentReference: normalizedPaymentReference } : {}),
+    };
+    const newStock = availableStock - quantity;
+
+    try {
+      if (auth.currentUser) {
+        const resultingStock = await runTransaction(db, async (transaction) => {
+          const inventoryRef = doc(db, 'inventory', inventoryItem.id);
+          const saleRef = doc(db, 'sales', sale.id);
+          const inventorySnapshot = await transaction.get(inventoryRef);
+          const currentStock = Number(inventorySnapshot.data()?.stock ?? 0);
+
+          if (currentStock < quantity) {
+            throw new Error(`Insufficient stock for ${product.flavor}. Available: ${currentStock} units.`);
+          }
+
+          transaction.update(inventoryRef, { stock: currentStock - quantity });
+          transaction.set(saleRef, sale);
+          return currentStock - quantity;
+        });
+
+        setInventory((previous) =>
+          previous.map((item) => (item.id === inventoryItem.id ? { ...item, stock: resultingStock } : item))
+        );
+      } else {
+        setInventory((previous) =>
+          previous.map((item) => (item.id === inventoryItem.id ? { ...item, stock: newStock } : item))
+        );
+        await firestoreSync.saveDoc('inventory', inventoryItem.id, { ...inventoryItem, stock: newStock });
+        await firestoreSync.saveDoc('sales', sale.id, sale);
+      }
+
+      setSales((previous) => [sale, ...previous]);
+      return { success: true, sale };
+    } catch (error: any) {
+      return { success: false, error: error?.message || 'Unable to save the sale. Please try again.' };
+    }
   };
 
   const recordMultiItemSale = (payload: {
@@ -3894,12 +4008,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const isAuthorizedManager = Boolean(
       currentUser &&
-        ['admin', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'branch_manager'].includes(currentUser.role) &&
-        currentUser.password === managerPin.trim()
+        ['admin', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'branch_manager'].includes(currentUser.role)
     );
     if (!isAuthorizedManager) {
-      idempotencyManager.markFailed(reqId, 'Invalid PIN');
-      return { success: false, message: 'Invalid Branch Manager Supervisor PIN authorization.' };
+      idempotencyManager.markFailed(reqId, 'Manager authorization required');
+      return { success: false, message: 'A signed-in manager account is required for this action.' };
     }
 
     const target = birReceipts.find((r) => r.id === receiptId || r.receiptNumber === receiptId);
@@ -4009,12 +4122,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const isAuthorizedManager = Boolean(
       currentUser &&
-        ['admin', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'branch_manager'].includes(currentUser.role) &&
-        currentUser.password === managerPin.trim()
+        ['admin', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'branch_manager'].includes(currentUser.role)
     );
     if (!isAuthorizedManager) {
-      idempotencyManager.markFailed(reqId, 'Invalid PIN');
-      return { success: false, message: 'Invalid Branch Manager Supervisor PIN authorization.' };
+      idempotencyManager.markFailed(reqId, 'Manager authorization required');
+      return { success: false, message: 'A signed-in manager account is required for this action.' };
     }
 
     const target = birReceipts.find((r) => r.id === receiptId || r.receiptNumber === receiptId);
@@ -4635,9 +4747,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           (o.status === 'approved' ||
             o.status === 'dispatched' ||
             o.status === 'pending' ||
-            o.status === 'waitingApproval') &&
-          o.status !== 'completed' &&
-          o.status !== 'rejected'
+            o.status === 'waitingApproval')
       );
       activeOrders.forEach((o) => {
         o.items.forEach((item) => {
@@ -4978,7 +5088,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           loggedAt: new Date().toISOString(),
         }));
         const totalSalesUnits = updatedSales.reduce((sum, item) => sum + item.unitsSold, 0);
-        const totalSalesRevenue = updatedSales.reduce((sum, item) => sum + item.totalAmount, 0);
+        const totalSalesRevenue = updatedSales.reduce((sum, item) => sum + (item.totalAmount ?? 0), 0);
 
         if (existing) {
           if (existing.status === DailyLogStatus.VALIDATED_AND_LOCKED) {
@@ -5373,7 +5483,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentBranch,
         syncState,
         toggleTheme,
-        login,
         loginWithFirebase,
         logout,
         switchUser,
@@ -5427,6 +5536,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createReceivingInspection,
         updateStock,
         recordSale,
+        submitManualSale,
         recordMultiItemSale,
         importBatchSales,
         addAnnouncement,

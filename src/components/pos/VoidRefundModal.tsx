@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { BIRReceipt, POSPaymentMethod } from '../../types';
 import { generateClientRequestId } from '../../utils/idempotency';
+import { auth } from '../../lib/firebase';
+import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import {
   X,
   AlertTriangle,
@@ -54,7 +56,7 @@ export const VoidRefundModal: React.FC<VoidRefundModalProps> = ({
     .filter((i) => selectedItems.includes(i.productId))
     .reduce((sum, i) => sum + i.netAmount, 0);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
     setErrorMsg(null);
@@ -64,13 +66,17 @@ export const VoidRefundModal: React.FC<VoidRefundModalProps> = ({
       return;
     }
 
-    if (!managerPin.trim()) {
-      setErrorMsg('Manager PIN authorization required.');
+    if (!managerPin.trim() || !auth.currentUser?.email) {
+      setErrorMsg('Re-enter the signed-in manager account password to authorize this action.');
       return;
     }
 
     setIsSubmitting(true);
     try {
+      await reauthenticateWithCredential(
+        auth.currentUser,
+        EmailAuthProvider.credential(auth.currentUser.email, managerPin.trim())
+      );
       if (mode === 'void') {
         const result = voidPOSTransaction(receipt.id, managerPin, managerName, reason.trim(), clientRequestId);
         if (result.success) {
@@ -300,15 +306,14 @@ export const VoidRefundModal: React.FC<VoidRefundModalProps> = ({
               </div>
               <div>
                 <label className="text-[11px] font-medium text-neutral-600 dark:text-neutral-400 block mb-0.5">
-                  Supervisor PIN <span className="text-neutral-400">(e.g. 1234)</span>
+                  Re-enter Firebase Password
                 </label>
                 <input
                   type="password"
                   required
-                  maxLength={8}
                   value={managerPin}
                   onChange={(e) => setManagerPin(e.target.value)}
-                  placeholder="Enter PIN"
+                  placeholder="Enter your account password"
                   className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg font-mono tracking-widest"
                 />
               </div>

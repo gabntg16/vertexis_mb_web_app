@@ -2,17 +2,282 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // The web app reads and writes its domain collections from an authenticated
-    // Firebase client. LocalStorage remains the offline-first fallback.
-    function isAuthenticated() {
+    // Prototype data model:
+    // - Auth custom claims are { role: 'admin' } or
+    //   { role: 'branch', branchId: '<branch document id>' }.
+    // - New users/{uid} documents are written by trusted Functions and have
+    //   firebaseUid == uid. The browser never stores Auth passwords.
+    // - Every branch-scoped record contains a required string branchId.
+    // - Sales, audit, status-history, movement, and shift-close records are
+    //   append-only from the browser; corrections are compensating records.
+
+    function signedIn() {
       return request.auth != null;
     }
 
-    // The client currently has no custom claims or server-side role mapping.
-    // Keep unauthenticated traffic blocked while the application establishes
-    // its authenticated data boundary.
+    function isAdmin() {
+      return signedIn() && request.auth.token.role == 'admin';
+    }
+
+    function isBranch() {
+      return signedIn()
+        && request.auth.token.role == 'branch'
+        && request.auth.token.branchId is string
+        && request.auth.token.branchId.size() > 0;
+    }
+
+    function claimBranchId() {
+      return request.auth.token.branchId;
+    }
+
+    function safeId(data) {
+      return (!('id' in data) || (data.id is string && data.id.size() > 0 && data.id.size() <= 128))
+        && data.keys().size() <= 80;
+    }
+
+    function safeOptionalText(data, field, maxLength) {
+      return !(field in data) || (data[field] is string && data[field].size() <= maxLength);
+    }
+
+    function safeOptionalTimestamp(data, field) {
+      return !(field in data) || data[field] is timestamp || data[field] is string;
+    }
+
+    function branchData(data) {
+      return safeId(data)
+        && 'branchId' in data
+        && data.branchId is string
+        && data.branchId.size() > 0
+        && data.branchId.size() <= 80
+        && safeOptionalText(data, 'branchName', 160)
+        && safeOptionalText(data, 'notes', 2000)
+        && safeOptionalText(data, 'remarks', 2000)
+        && safeOptionalText(data, 'reason', 1000)
+        && safeOptionalText(data, 'performedBy', 160)
+        && safeOptionalText(data, 'createdBy', 160)
+        && safeOptionalTimestamp(data, 'updatedAt')
+        && safeOptionalText(data, 'clientRequestId', 160)
+        && safeOptionalText(data, 'idempotencyKey', 160);
+    }
+
+    function ownBranch(data) {
+      return isBranch() && branchData(data) && data.branchId == claimBranchId();
+    }
+
+    function unchangedBranch() {
+      return resource.data.branchId == request.resource.data.branchId
+        && request.resource.data.branchId == claimBranchId();
+    }
+
+    function applicationData(data) {
+      return safeId(data)
+        && data.keys().hasOnly([
+          'id', 'branchName', 'branchCode', 'businessType', 'address', 'contactNumber',
+          'email', 'operatingHours', 'managerName', 'managerPhone', 'managerEmail',
+          'managerGovId', 'documents', 'status', 'reviewNotes', 'rejectionReason',
+          'revisionRemarks', 'submittedAt', 'updatedAt', 'reviewedAt', 'reviewedBy',
+          'approvedBranchId'
+        ])
+        && safeOptionalText(data, 'branchName', 160)
+        && safeOptionalText(data, 'address', 500)
+        && safeOptionalText(data, 'email', 254)
+        && safeOptionalText(data, 'managerEmail', 254)
+        && safeOptionalText(data, 'managerGovId', 160)
+        && safeOptionalText(data, 'reviewNotes', 2000)
+        && safeOptionalText(data, 'rejectionReason', 1000)
+        && safeOptionalText(data, 'revisionRemarks', 2000);
+    }
+
+    function accountData(data) {
+      return safeId(data)
+        && data.keys().hasOnly([
+          'id', 'branchId', 'branchName', 'username', 'fullName', 'email', 'phone',
+          'role', 'permissions', 'isActive', 'credentialsSent', 'credentialsSentAt',
+          'createdAt', 'lastLoginAt', 'updatedAt'
+        ])
+        && branchData(data)
+        && data.email is string
+        && data.email.size() <= 254
+        && data.fullName is string
+        && data.fullName.size() > 0
+        && data.fullName.size() <= 160
+        && !('temporaryPassword' in data);
+    }
+
+    function auditData(data) {
+      return branchData(data)
+        && data.keys().hasOnly([
+          'id', 'branchId', 'branchName', 'action', 'remarks', 'changedBy', 'performedBy',
+          'user', 'timestamp', 'createdAt', 'metadata', 'clientRequestId', 'idempotencyKey',
+          'updatedAt'
+        ])
+        && ('action' in data)
+        && data.action is string
+        && data.action.size() > 0
+        && data.action.size() <= 160;
+    }
+
+    function statusHistoryData(data) {
+      return branchData(data)
+        && data.keys().hasOnly([
+          'id', 'branchId', 'branchName', 'previousStatus', 'newStatus', 'reason',
+          'changedBy', 'timestamp', 'createdAt', 'updatedAt'
+        ])
+        && data.previousStatus is string
+        && data.newStatus is string
+        && data.reason is string
+        && data.reason.size() <= 1000;
+    }
+
+    function canReadBranch(data) {
+      return isAdmin() || ownBranch(data);
+    }
+
+    function canUpdateBranch() {
+      return isAdmin() || (ownBranch(request.resource.data) && unchangedBranch());
+    }
+
+    match /users/{userId} {
+      allow read: if isAdmin() || (signedIn() && userId == request.auth.uid);
+      // Profiles and claims are provisioned/updated by Admin SDK only.
+      allow write: if false;
+    }
+
+    match /branches/{branchId} {
+      allow read: if isAdmin() || (isBranch() && branchId == claimBranchId());
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /products/{productId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /events/{eventId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /branch_applications/{applicationId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && applicationData(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /branch_documents/{documentId} {
+      allow read: if canReadBranch(resource.data);
+      allow create: if isAdmin() || ownBranch(request.resource.data);
+      allow update: if canUpdateBranch();
+      allow delete: if isAdmin();
+    }
+
+    match /branch_accounts/{accountId} {
+      allow read: if canReadBranch(resource.data);
+      allow create: if isAdmin() && accountData(request.resource.data);
+      allow update: if isAdmin() && accountData(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /branch_status_history/{historyId} {
+      allow read: if canReadBranch(resource.data);
+      allow create: if isAdmin() || (ownBranch(request.resource.data) && statusHistoryData(request.resource.data));
+      allow update, delete: if false;
+    }
+
+    match /branch_audit_logs/{logId} {
+      allow read: if canReadBranch(resource.data);
+      allow create: if isAdmin() || (ownBranch(request.resource.data) && auditData(request.resource.data));
+      allow update, delete: if false;
+    }
+
+    match /sales/{saleId} {
+      allow read: if canReadBranch(resource.data);
+      allow create: if isAdmin() || ownBranch(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    match /inventoryMovements/{movementId} {
+      allow read: if canReadBranch(resource.data);
+      allow create: if isAdmin() || ownBranch(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    match /posAuditLogs/{auditId} {
+      allow read: if canReadBranch(resource.data);
+      allow create: if isAdmin() || (ownBranch(request.resource.data) && auditData(request.resource.data));
+      allow update, delete: if false;
+    }
+
+    match /shiftClosings/{closingId} {
+      allow read: if canReadBranch(resource.data);
+      allow create: if isAdmin() || ownBranch(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    match /orders/{orderId} {
+      allow read: if canReadBranch(resource.data);
+      allow create: if isAdmin() || ownBranch(request.resource.data);
+      allow update: if canUpdateBranch();
+      allow delete: if isAdmin();
+    }
+
+    match /deliveries/{deliveryId} {
+      allow read: if canReadBranch(resource.data);
+      allow create: if isAdmin() || ownBranch(request.resource.data);
+      allow update: if canUpdateBranch();
+      allow delete: if isAdmin();
+    }
+
+    match /receivings/{receivingId} {
+      allow read: if canReadBranch(resource.data);
+      allow create: if isAdmin() || ownBranch(request.resource.data);
+      allow update: if canUpdateBranch();
+      allow delete: if isAdmin();
+    }
+
+    match /inventory/{inventoryId} {
+      allow read: if canReadBranch(resource.data);
+      allow create: if isAdmin() || ownBranch(request.resource.data);
+      allow update: if canUpdateBranch();
+      allow delete: if isAdmin();
+    }
+
+    match /spoilage_records/{recordId} {
+      allow read: if canReadBranch(resource.data);
+      allow create: if isAdmin() || ownBranch(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    match /physical_audits/{auditId} {
+      allow read: if canReadBranch(resource.data);
+      allow create: if isAdmin() || ownBranch(request.resource.data);
+      allow update: if canUpdateBranch();
+      allow delete: if isAdmin();
+    }
+
+    match /birReceipts/{receiptId} {
+      allow read: if canReadBranch(resource.data);
+      allow create: if isAdmin() || ownBranch(request.resource.data);
+      allow update: if canUpdateBranch();
+      allow delete: if false;
+    }
+
+    match /production_batches/{batchId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /system_sync/{documentId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Any collection not explicitly listed above remains denied.
     match /{document=**} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if false;
     }
   }
 }

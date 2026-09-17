@@ -94,6 +94,18 @@ const STAGE_CONFIG: Record<ProductionStage, { label: string; icon: React.FC<{ cl
     color: 'text-sky-600 dark:text-sky-400',
     bg: 'bg-sky-500/10 border-sky-500/30',
   },
+  in_production: {
+    label: '2. Kettle, Whip & Curing',
+    icon: Flame,
+    color: 'text-orange-600 dark:text-orange-400',
+    bg: 'bg-orange-500/10 border-orange-500/30',
+  },
+  packaging: {
+    label: '3. Packaging & QC Inspected',
+    icon: Box,
+    color: 'text-purple-600 dark:text-purple-400',
+    bg: 'bg-purple-500/10 border-purple-500/30',
+  },
   packaged: {
     label: '3. Packaging & QC Inspected',
     icon: Box,
@@ -1211,5 +1223,4 @@ export const BranchOrders: React.FC = () => {
     </div>
   );
 };
-
 

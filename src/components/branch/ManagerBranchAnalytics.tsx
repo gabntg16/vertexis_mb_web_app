@@ -63,7 +63,7 @@ export const ManagerBranchAnalytics: React.FC<ManagerBranchAnalyticsProps> = ({
       totalSpoilageCost += log.totalSpoilageCost || 0;
     });
 
-    const lowStockItems = branchInventory.filter((i) => i.currentStock <= i.minThreshold);
+    const lowStockItems = branchInventory.filter((i) => (i.currentStock ?? i.stock) <= (i.minThreshold ?? 0));
 
     return {
       totalRevenue,

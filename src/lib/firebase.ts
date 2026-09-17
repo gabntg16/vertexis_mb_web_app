@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
+import { getFunctions } from 'firebase/functions';
 import {
   initializeFirestore,
   getFirestore,
@@ -75,7 +76,4 @@ export { app, db, firebaseConfig };
 
 export const auth = getAuth(app);
 
-const secondaryApp = getApps().find((firebaseApp) => firebaseApp.name === 'staff-creation')
-  || initializeApp(firebaseConfig, 'staff-creation');
-
-export const staffCreationAuth = getAuth(secondaryApp);
+export const functions = getFunctions(app, 'asia-southeast1');

@@ -42,8 +42,8 @@ export const BranchAuditTrailModal: React.FC<BranchAuditTrailModalProps> = ({
   const filteredLogs = logs.filter((log) => {
     const matchesSearch =
       log.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.remarks.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.user.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (log.remarks || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (log.user || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (log.branchName && log.branchName.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const matchesAction = selectedActionFilter === 'all' || log.action === selectedActionFilter;
@@ -59,7 +59,7 @@ export const BranchAuditTrailModal: React.FC<BranchAuditTrailModalProps> = ({
       `"${l.branchName || 'Network-wide'}"`,
       `"${l.action}"`,
       `"${l.user}"`,
-      `"${l.remarks.replace(/"/g, '""')}"`,
+      `"${(l.remarks || '').replace(/"/g, '""')}"`,
     ]);
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');

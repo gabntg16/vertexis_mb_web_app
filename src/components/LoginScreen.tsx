@@ -140,12 +140,12 @@ export const LoginScreen: React.FC = () => {
   };
 
   return (
-    <div className={`mallow-shell min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8 transition-colors ${
+    <div className={`mallow-login-shell mallow-shell min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8 transition-colors ${
       themeMode === 'dark' ? 'bg-[#0e0e0e] text-white' : 'bg-[#F8F9FA] text-[#231F20]'
     }`}>
       <div className="w-full max-w-md space-y-6">
         {/* Brand Card */}
-        <div className={`mallow-panel rounded-[2rem] p-8 shadow-xl border text-center relative overflow-hidden transition-all ${
+        <div className={`mallow-login-card mallow-panel rounded-[2rem] p-8 shadow-xl border text-center relative overflow-hidden transition-all ${
           themeMode === 'dark'
             ? 'bg-[#161616] border-neutral-800'
             : 'bg-white border-[#80C7F2]/25'

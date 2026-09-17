@@ -133,6 +133,50 @@ export const COMMISSARY_SENDER: JTSender = {
 // Carrier Public Tracking URL for J&T Express packages
 export const JT_EXPRESS_TRACKING_URL = 'https://www.jtexpress.ph/index/query/gzquery.html';
 
+/** Build a deterministic printable label without calling a carrier API. */
+export function prepareShippingLabel(
+  billCode: string,
+  orderId: string,
+  receiver: Partial<JTReceiver>,
+  items: JTItem[],
+  options: { weightKg?: number; declaredValue?: number } = {}
+): JTShippingLabelData {
+  const destination = resolveDestinationHub(receiver.city || receiver.province || '');
+  const totalPacks = items.reduce((sum, item) => sum + item.itemQuantity, 0);
+  const calculatedWeight = items.reduce((sum, item) => sum + item.itemQuantity * item.itemWeight, 0);
+
+  return {
+    billCode,
+    orderId,
+    sortingCode: `MB-${destination.hubCode}-${billCode.slice(-4)}`,
+    destinationCode: destination.hubCode,
+    serviceType: 'Standard Parcel',
+    sender: COMMISSARY_SENDER,
+    receiver: {
+      name: receiver.name || 'Branch Store Manager',
+      mobile: receiver.mobile || receiver.phone || '+63 917 555 0192',
+      address: receiver.address || 'Branch destination',
+      province: receiver.province || 'Camarines Sur',
+      city: receiver.city || destination.hubName,
+      district: receiver.district,
+      postalCode: receiver.postalCode || '0000',
+      branchCode: receiver.branchCode,
+      branchName: receiver.branchName,
+    },
+    items,
+    totalWeightKg: options.weightKg ?? Math.max(0.5, Number(calculatedWeight.toFixed(2))),
+    totalPacks,
+    declaredValue: options.declaredValue ?? 0,
+    shippingFee: 0,
+    createdAt: new Date().toISOString(),
+    barcodeValue: billCode,
+    qrCodeValue: `VERTEXIS|${orderId}|${billCode}`,
+    handlingInstructions: ['Keep dry.', 'Protect from heat.', 'Verify package count on receipt.'],
+  };
+}
+
+export const jtExpressService = { prepareShippingLabel };
+
 /**
  * Resolves regional logistics hub based on city or province
  */

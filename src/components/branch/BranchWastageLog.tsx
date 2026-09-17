@@ -137,15 +137,11 @@ export const BranchWastageLog: React.FC = () => {
     try {
       const record = recordSpoilage({
         branchId: currentBranch.id,
-        branchName: currentBranch.name,
         productId: selectedProduct.id,
-        productName: selectedProduct.name,
-        flavor: selectedProduct.flavor,
         quantity,
         reason: selectedReason,
         batchCode: batchCode.trim() || undefined,
         reportedBy: currentUser?.name || 'Branch Manager',
-        costImpact: estimatedCostImpact,
         notes: notes.trim() || undefined,
       });
 

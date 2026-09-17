@@ -1,21 +1,18 @@
 import React, { useState } from 'react';
 import { useData } from '../../../context/DataContext';
 import { Branch, BranchAccount, BranchAccountRole } from '../../../types';
+import { resetUserPassword } from '../../../services/accountProvisioning';
 import {
   X,
   UserPlus,
   Users,
   Shield,
-  Key,
-  Copy,
-  Check,
   Send,
   RotateCcw,
   CheckCircle2,
   XCircle,
   Mail,
   Phone,
-  Lock,
 } from 'lucide-react';
 
 interface BranchAccountsModalProps {
@@ -42,6 +39,16 @@ const DEFAULT_PERMISSIONS_BY_ROLE: Record<BranchAccountRole, string[]> = {
     'Order Processing',
     'Sales Recording',
   ],
+  Cashier: [
+    'Sales Recording',
+    'Cash Drawer Operations',
+    'Receipt Printing',
+  ],
+  'Inventory Specialist': [
+    'Inventory Management',
+    'Physical Stock Audits',
+    'Receiving Inspection',
+  ],
 };
 
 export const BranchAccountsModal: React.FC<BranchAccountsModalProps> = ({
@@ -64,25 +71,30 @@ export const BranchAccountsModal: React.FC<BranchAccountsModalProps> = ({
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newRole, setNewRole] = useState<BranchAccountRole>('Staff');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [lastResetInfo, setLastResetInfo] = useState<{ id: string; password: string } | null>(null);
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
+  const [resetLink, setResetLink] = useState<string | null>(null);
 
   if (!isOpen || !branch) return null;
 
   const accounts = getBranchAccounts(branch.id);
 
-  const handleAddAccountSubmit = (e: React.FormEvent) => {
+  const handleAddAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFullName.trim() || !newEmail.trim()) return;
 
-    createBranchAccount({
-      branchId: branch.id,
-      fullName: newFullName.trim(),
-      email: newEmail.trim(),
-      phone: newPhone.trim() || undefined,
-      role: newRole,
-      permissions: DEFAULT_PERMISSIONS_BY_ROLE[newRole],
-    });
+    try {
+      await createBranchAccount({
+        branchId: branch.id,
+        fullName: newFullName.trim(),
+        email: newEmail.trim(),
+        phone: newPhone.trim() || undefined,
+        role: newRole,
+        permissions: DEFAULT_PERMISSIONS_BY_ROLE[newRole],
+      });
+    } catch (error) {
+      setResetNotice(error instanceof Error ? error.message : 'The account could not be provisioned.');
+      return;
+    }
 
     setNewFullName('');
     setNewEmail('');
@@ -91,15 +103,27 @@ export const BranchAccountsModal: React.FC<BranchAccountsModalProps> = ({
     setShowAddForm(false);
   };
 
-  const handleResetPassword = (accountId: string) => {
-    const res = resetBranchAccountPassword(accountId);
-    setLastResetInfo({ id: accountId, password: res.temporaryPassword });
+  const handleResetPassword = async (accountId: string) => {
+    resetBranchAccountPassword(accountId);
+    try {
+      const result = await resetUserPassword(accountId);
+      setResetLink(result.passwordResetLink);
+      setResetNotice('A secure password-reset link was generated for this account.');
+    } catch (error) {
+      setResetNotice(error instanceof Error ? error.message : 'The secure reset link could not be generated.');
+    }
+    setTimeout(() => setResetNotice(null), 4000);
   };
 
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+  const handleSendCredentials = async (accountId: string) => {
+    try {
+      const result = await sendAccountCredentials(accountId);
+      setResetLink(result.passwordResetLink || null);
+      setResetNotice('A secure password-reset link was prepared for delivery.');
+    } catch (error) {
+      setResetNotice(error instanceof Error ? error.message : 'Credentials could not be prepared.');
+    }
+    setTimeout(() => setResetNotice(null), 4000);
   };
 
   return (
@@ -156,6 +180,16 @@ export const BranchAccountsModal: React.FC<BranchAccountsModalProps> = ({
               <span>{showAddForm ? 'Cancel' : 'Create Staff Account'}</span>
             </button>
           </div>
+          {resetNotice && (
+            <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-[11px] text-sky-700 dark:text-sky-300">
+              {resetNotice}
+              {resetLink && (
+                <a className="mt-1 block break-all font-mono underline" href={resetLink} target="_blank" rel="noreferrer">
+                  Open secure reset link
+                </a>
+              )}
+            </div>
+          )}
 
           {/* Add Staff Form */}
           {showAddForm && (
@@ -256,7 +290,6 @@ export const BranchAccountsModal: React.FC<BranchAccountsModalProps> = ({
               </div>
             ) : (
               accounts.map((acc) => {
-                const isResetThisSession = lastResetInfo?.id === acc.id;
 
                 return (
                   <div
@@ -324,41 +357,20 @@ export const BranchAccountsModal: React.FC<BranchAccountsModalProps> = ({
 
                       {/* Controls */}
                       <div className="flex flex-wrap items-center gap-2 self-end sm:self-center">
-                        {acc.temporaryPassword && (
-                          <div className="flex items-center space-x-1 bg-neutral-900 border border-neutral-700 px-2 py-1 rounded-lg">
-                            <span className="text-[10px] text-neutral-400">Pass:</span>
-                            <span className="font-mono text-xs text-[#80C7F2] font-bold">
-                              {isResetThisSession ? lastResetInfo?.password : acc.temporaryPassword}
-                            </span>
-                            <button
-                              onClick={() =>
-                                copyToClipboard(
-                                  isResetThisSession ? lastResetInfo!.password : acc.temporaryPassword!,
-                                  acc.id
-                                )
-                              }
-                              className="p-1 text-neutral-400 hover:text-white"
-                              title="Copy temporary password"
-                            >
-                              {copiedId === acc.id ? (
-                                <Check className="w-3 h-3 text-emerald-400" />
-                              ) : (
-                                <Copy className="w-3 h-3" />
-                              )}
-                            </button>
-                          </div>
-                        )}
+                        <span className="text-[10px] text-neutral-500 px-2 py-1 rounded-lg border border-neutral-800">
+                          Passwords are delivered securely
+                        </span>
 
                         <button
                           onClick={() => handleResetPassword(acc.id)}
                           className="px-2.5 py-1 rounded-lg border border-neutral-700 hover:bg-neutral-800 text-[11px] font-semibold text-neutral-300 transition-colors flex items-center space-x-1"
                         >
                           <RotateCcw className="w-3 h-3" />
-                          <span>Reset Pass</span>
+                          <span>Reset Access</span>
                         </button>
 
                         <button
-                          onClick={() => sendAccountCredentials(acc.id)}
+                          onClick={() => void handleSendCredentials(acc.id)}
                           className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors flex items-center space-x-1 ${
                             acc.credentialsSent
                               ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'

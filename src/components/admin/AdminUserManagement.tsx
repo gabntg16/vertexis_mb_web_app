@@ -1,21 +1,16 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
-import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
-import { db, staffCreationAuth } from '../../lib/firebase';
+import { provisionUser, updateUserAccess } from '../../services/accountProvisioning';
 import {
   Users,
   Shield,
   UserPlus,
   CheckCircle2,
   AlertTriangle,
-  Building2,
-  Lock,
   Search,
-  KeyRound,
-  Sparkles,
+  Copy,
 } from 'lucide-react';
-import { Role, UserModel } from '../../types';
+import { Role } from '../../types';
 
 export const AdminUserManagement: React.FC = () => {
   const {
@@ -39,16 +34,15 @@ export const AdminUserManagement: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [newName, setNewName] = useState<string>('');
   const [newEmail, setNewEmail] = useState<string>('');
-  const [newPassword, setNewPassword] = useState<string>('');
   const [newRole, setNewRole] = useState<'admin' | 'staff'>('staff');
   const [newBranchId, setNewBranchId] = useState<string>('b-legazpi');
+  const [passwordResetLink, setPasswordResetLink] = useState<string | null>(null);
 
   const filteredUsers = useMemo(() => {
     return (users || []).filter((u) => {
       const matchSearch =
         (u.name && u.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        ((u as any).username && (u as any).username.toLowerCase().includes(searchTerm.toLowerCase()));
+        (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchRole =
         roleFilter === 'all' ||
         u.role === roleFilter ||
@@ -59,63 +53,67 @@ export const AdminUserManagement: React.FC = () => {
     });
   }, [users, searchTerm, roleFilter]);
 
-  const handleRoleChange = (userId: string, targetRole: Role) => {
-    const res = updateUserRole(userId, targetRole);
-    if (res.success) {
+  const handleRoleChange = async (userId: string, targetRole: Role) => {
+    const user = users.find((candidate) => candidate.id === userId);
+    if (!user) return;
+    try {
+      await updateUserAccess({
+        userId: user.firebaseUid || user.id,
+        role: targetRole === Role.SUPER_ADMIN ? 'admin' : 'branch',
+        branchId: targetRole === Role.SUPER_ADMIN ? undefined : user.branchId,
+      });
+      const res = updateUserRole(userId, targetRole);
+      if (!res.success) throw new Error(res.error || 'Failed to update role.');
       setFeedback({ text: `User role successfully updated to ${targetRole}.`, type: 'success' });
       setTimeout(() => setFeedback(null), 3000);
-    } else {
-      setFeedback({ text: res.error || 'Failed to update role.', type: 'error' });
+    } catch (error) {
+      setFeedback({ text: error instanceof Error ? error.message : 'Failed to update role.', type: 'error' });
     }
   };
 
-  const handleBranchChange = (userId: string, targetBranchId: string) => {
+  const handleBranchChange = async (userId: string, targetBranchId: string) => {
     const user = users.find((u) => u.id === userId);
     if (!user) return;
-    const res = updateUserRole(userId, user.role, targetBranchId);
-    if (res.success) {
+    try {
+      await updateUserAccess({ userId: user.firebaseUid || user.id, role: 'branch', branchId: targetBranchId });
+      const res = updateUserRole(userId, user.role, targetBranchId);
+      if (!res.success) throw new Error(res.error || 'Failed to update branch.');
       setFeedback({ text: `User branch assignment updated.`, type: 'success' });
       setTimeout(() => setFeedback(null), 3000);
+    } catch (error) {
+      setFeedback({ text: error instanceof Error ? error.message : 'Failed to update branch.', type: 'error' });
     }
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newEmail.trim() || newPassword.length < 6) {
+    if (!newName.trim() || !newEmail.trim()) {
       setFeedback({ text: 'Please fill in all required user fields.', type: 'error' });
       return;
     }
 
     try {
-      const credential = await createUserWithEmailAndPassword(
-        staffCreationAuth,
-        newEmail.trim().toLowerCase(),
-        newPassword
-      );
-      const branch = branches.find((b) => b.id === newBranchId);
-      const role = newRole === 'admin' ? Role.SUPER_ADMIN : Role.BRANCH_STAFF;
-      const userProfile = {
-        id: credential.user.uid,
-        firebaseUid: credential.user.uid,
+      const result = await provisionUser({
         name: newName.trim(),
-        email: credential.user.email || newEmail.trim().toLowerCase(),
-        role,
-        branchId: role === Role.SUPER_ADMIN ? undefined : newBranchId,
-        branchName: role === Role.SUPER_ADMIN ? 'Central Commissary HQ' : branch?.name,
-      };
+        email: newEmail.trim().toLowerCase(),
+        role: newRole === 'admin' ? 'admin' : 'branch',
+        branchId: newRole === 'admin' ? undefined : newBranchId,
+        branchRole: newRole === 'admin' ? undefined : 'Staff',
+      });
+      addNewUser(result.user);
 
-      await setDoc(doc(db, 'users', credential.user.uid), userProfile);
-      addNewUser(userProfile);
-      await signOut(staffCreationAuth);
-
-      setFeedback({ text: `Created Firebase account for ${newName.trim()}.`, type: 'success' });
+      setFeedback({
+        text: result.passwordResetLink
+          ? `Created Firebase account for ${newName.trim()}; a secure password-reset link is ready for delivery.`
+          : `Created Firebase account for ${newName.trim()}. Configure Auth email delivery before sending access instructions.`,
+        type: 'success',
+      });
+      setPasswordResetLink(result.passwordResetLink || null);
       setNewName('');
       setNewEmail('');
-      setNewPassword('');
       setShowAddModal(false);
       setTimeout(() => setFeedback(null), 4000);
     } catch (creationError) {
-      await signOut(staffCreationAuth).catch(() => undefined);
       const message = creationError instanceof Error ? creationError.message : 'Failed to create Firebase account.';
       setFeedback({ text: message, type: 'error' });
     }
@@ -186,6 +184,26 @@ export const AdminUserManagement: React.FC = () => {
         </div>
       )}
 
+      {passwordResetLink && (
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-xs text-sky-900 dark:border-sky-800/50 dark:bg-sky-950/30 dark:text-sky-100">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-bold">One-time secure invite link</p>
+              <p className="mt-0.5 text-[11px] opacity-80">Copy this link to the new account owner. It is not saved in VertexIS.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void navigator.clipboard.writeText(passwordResetLink)}
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-sky-300 px-2.5 py-1.5 text-[11px] font-bold hover:bg-sky-100 dark:border-sky-700 dark:hover:bg-sky-900/50"
+            >
+              <Copy className="h-3.5 w-3.5" />
+              Copy link
+            </button>
+          </div>
+          <p className="mt-2 break-all rounded-lg bg-white/70 p-2 font-mono text-[10px] dark:bg-black/20">{passwordResetLink}</p>
+        </div>
+      )}
+
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="relative w-full sm:w-72">
@@ -251,7 +269,7 @@ export const AdminUserManagement: React.FC = () => {
                         )}
                       </div>
                       <div className="text-[11px] text-neutral-400 font-normal font-mono">
-                        @{u.username} • {u.id}
+                        {u.email} • {u.id}
                       </div>
                     </td>
                     <td className="py-3.5 px-4">
@@ -302,7 +320,7 @@ export const AdminUserManagement: React.FC = () => {
                       </select>
                     </td>
                     <td className="py-3.5 px-4 text-right">
-                      {!isCurrent && (
+                      {import.meta.env.DEV && !isCurrent && (
                         <button
                           type="button"
                           onClick={() => switchUser(u.id)}
@@ -366,20 +384,9 @@ export const AdminUserManagement: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
-                  Temporary Password
-                </label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="At least 6 characters"
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-[#121212] text-neutral-900 dark:text-white focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
+              <p className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-[11px] text-purple-800 dark:border-purple-800/50 dark:bg-purple-950/30 dark:text-purple-200">
+                Firebase generates the account credentials on the trusted backend. The user receives access through a secure password-reset link; no password is stored in VertexIS.
+              </p>
 
               <div>
                 <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
@@ -395,7 +402,7 @@ export const AdminUserManagement: React.FC = () => {
                 </select>
               </div>
 
-              {newRole !== Role.SUPER_ADMIN && (
+              {newRole !== 'admin' && (
                 <div>
                   <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
                     Store Branch Association
@@ -407,7 +414,7 @@ export const AdminUserManagement: React.FC = () => {
                   >
                     {branches.map((b) => (
                       <option key={b.id} value={b.id}>
-                        {b.name} ({b.city})
+                        {b.name} ({b.location})
                       </option>
                     ))}
                   </select>

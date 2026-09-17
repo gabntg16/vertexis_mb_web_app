@@ -1,4 +1,8 @@
 {
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs20"
+  },
   "firestore": {
     "database": "marshbites-mbms-db",
     "location": "asia-southeast1",

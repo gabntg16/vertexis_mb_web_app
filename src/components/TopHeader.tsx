@@ -285,12 +285,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           </div>
 
           {/* Right Action Bar */}
-          <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+          <div className="mallow-header-actions flex items-center space-x-1.5 sm:space-x-2 shrink-0">
             {/* Cloud Firestore Status Badge */}
             <button
               id="top-firestore-sync-btn"
               onClick={handleManualSync}
-              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
+              className={`mallow-header-control flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
                 syncState.status === 'connected'
                   ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20'
                   : syncState.status === 'syncing' || isManualSyncing
@@ -326,7 +326,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               <button
                 id="top-user-switcher-btn"
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all shadow-xs ${
+                className={`mallow-header-control flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all shadow-xs ${
                   isSuperAdmin(currentUser)
                     ? 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20'
                     : isBranchManager(currentUser)
@@ -352,7 +352,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
               </button>
 
-              {showUserMenu && (
+              {import.meta.env.DEV && showUserMenu && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
                   <div className="absolute right-0 mt-2 w-72 max-h-80 overflow-y-auto rounded-2xl shadow-2xl border z-50 p-2 text-xs bg-white dark:bg-[#1c1c1c] border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white">
@@ -422,7 +422,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               <button
                 id="top-notifications-btn"
                 onClick={() => setShowNotificationMenu(!showNotificationMenu)}
-                className={`relative p-2 rounded-xl border transition-colors ${
+                className={`mallow-header-control relative p-2 rounded-xl border transition-colors ${
                   showNotificationMenu
                     ? 'bg-[#80C7F2]/20 border-[#80C7F2]/40 text-[#1a7bb5] dark:text-[#80C7F2]'
                     : 'bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
@@ -651,7 +651,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <button
               id="top-theme-toggle-btn"
               onClick={toggleTheme}
-              className="p-2 rounded-xl border transition-colors bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-amber-300 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+              className="mallow-header-control p-2 rounded-xl border transition-colors bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-amber-300 hover:bg-neutral-200 dark:hover:bg-neutral-700"
               title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
               {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
@@ -661,7 +661,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <button
               id="top-logout-btn"
               onClick={logout}
-              className="px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-red-600 dark:hover:text-red-400 cursor-pointer"
+              className="mallow-header-control px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-red-600 dark:hover:text-red-400 cursor-pointer"
               title="Log Out"
             >
               Log Out

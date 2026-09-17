@@ -148,6 +148,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // 2. BRANCH_MANAGER Navigation: Render Store Leadership & Audit Tabs
   const managerTabs = [
+    { id: 'current_stock', label: 'Current Branch Stock', icon: Boxes },
     {
       id: 'log_validation',
       label: 'Log Validation Dashboard',
@@ -341,7 +342,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
 
           {/* User Switcher Dropdown */}
-          {showUserMenu && (
+          {import.meta.env.DEV && showUserMenu && (
             <>
               <div className="fixed inset-0 z-50" onClick={() => setShowUserMenu(false)} />
               <div className="absolute left-0 right-0 top-full mt-1.5 max-h-80 overflow-y-auto rounded-2xl shadow-2xl border z-50 p-2 text-xs bg-white dark:bg-[#1c1c1c] border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white">
@@ -416,9 +417,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               key={tab.id}
               id={`nav-tab-${tab.id}`}
               onClick={() => handleTabClick(tab.id)}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all group ${
+              className={`mallow-nav-item w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all group ${
                 isActive
-                  ? 'bg-[#80C7F2] text-neutral-950 font-bold shadow-xs'
+                  ? 'mallow-nav-item-active bg-[#80C7F2] text-neutral-950 font-bold shadow-xs'
                   : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-950 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800/80'
               }`}
               title={tab.label}
@@ -463,9 +464,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   key={tab.id}
                   id={`nav-tab-${tab.id}`}
                   onClick={() => handleTabClick(tab.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
+                  className={`mallow-nav-item w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
                     isActive
-                      ? 'bg-[#80C7F2] text-neutral-950 font-bold shadow-xs'
+                      ? 'mallow-nav-item-active bg-[#80C7F2] text-neutral-950 font-bold shadow-xs'
                       : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-950 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800/80'
                   }`}
                   title={tab.label}

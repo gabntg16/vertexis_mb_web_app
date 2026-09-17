@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { DataProvider, useData } from './context/DataContext';
 import { Sidebar } from './components/Sidebar';
 import { TopHeader } from './components/TopHeader';
@@ -6,29 +6,30 @@ import { LoginScreen } from './components/LoginScreen';
 import { MfaEnrollmentGate } from './components/MfaEnrollmentGate';
 import { isSuperAdmin, isBranchManager, isBranchStaff } from './utils/securityValidator';
 
-// Super Admin HQ Views
-import { AdminDashboard } from './components/admin/AdminDashboard';
-import { AdminOrders } from './components/admin/AdminOrders';
-import { AdminProduction } from './components/admin/AdminProduction';
-import { AdminBranches } from './components/admin/AdminBranches';
-import { AdminLogistics } from './components/admin/AdminLogistics';
-import { AdminSalesHistory } from './components/admin/AdminSalesHistory';
-import { AdminCalendar } from './components/admin/AdminCalendar';
-import { AdminAnnouncements } from './components/admin/AdminAnnouncements';
-import { AdminProductPricing } from './components/admin/AdminProductPricing';
-import { AdminUserManagement } from './components/admin/AdminUserManagement';
+type ComponentModule = Record<string, React.ComponentType<any>>;
+const lazyNamed = (loader: () => Promise<unknown>, exportName: string) =>
+  lazy(async () => ({ default: (await loader() as ComponentModule)[exportName] }));
 
-// Branch Manager (Store Leadership & Audit) Views
-import { ManagerLogValidation } from './components/branch/ManagerLogValidation';
-import { ManagerRequisitions } from './components/branch/ManagerRequisitions';
-import { ManagerBranchAnalytics } from './components/branch/ManagerBranchAnalytics';
-
-// Branch Staff (Frontline Ground Operations) Views
-import { StaffPhysicalCounts } from './components/branch/StaffPhysicalCounts';
-import { StaffManualSales } from './components/branch/StaffManualSales';
-import { StaffWastageLog } from './components/branch/StaffWastageLog';
-import { StaffInboundReceiving } from './components/branch/StaffInboundReceiving';
-import { StaffShiftSummary } from './components/branch/StaffShiftSummary';
+// Load role-specific screens on demand so a cashier does not download every HQ workflow.
+const AdminDashboard = lazyNamed(() => import('./components/admin/AdminDashboard'), 'AdminDashboard');
+const AdminOrders = lazyNamed(() => import('./components/admin/AdminOrders'), 'AdminOrders');
+const AdminProduction = lazyNamed(() => import('./components/admin/AdminProduction'), 'AdminProduction');
+const AdminBranches = lazyNamed(() => import('./components/admin/AdminBranches'), 'AdminBranches');
+const AdminLogistics = lazyNamed(() => import('./components/admin/AdminLogistics'), 'AdminLogistics');
+const AdminSalesHistory = lazyNamed(() => import('./components/admin/AdminSalesHistory'), 'AdminSalesHistory');
+const AdminCalendar = lazyNamed(() => import('./components/admin/AdminCalendar'), 'AdminCalendar');
+const AdminAnnouncements = lazyNamed(() => import('./components/admin/AdminAnnouncements'), 'AdminAnnouncements');
+const AdminProductPricing = lazyNamed(() => import('./components/admin/AdminProductPricing'), 'AdminProductPricing');
+const AdminUserManagement = lazyNamed(() => import('./components/admin/AdminUserManagement'), 'AdminUserManagement');
+const ManagerLogValidation = lazyNamed(() => import('./components/branch/ManagerLogValidation'), 'ManagerLogValidation');
+const ManagerRequisitions = lazyNamed(() => import('./components/branch/ManagerRequisitions'), 'ManagerRequisitions');
+const ManagerBranchAnalytics = lazyNamed(() => import('./components/branch/ManagerBranchAnalytics'), 'ManagerBranchAnalytics');
+const BranchCurrentStock = lazyNamed(() => import('./components/branch/BranchCurrentStock'), 'BranchCurrentStock');
+const StaffPhysicalCounts = lazyNamed(() => import('./components/branch/StaffPhysicalCounts'), 'StaffPhysicalCounts');
+const StaffManualSales = lazyNamed(() => import('./components/branch/StaffManualSales'), 'StaffManualSales');
+const StaffWastageLog = lazyNamed(() => import('./components/branch/StaffWastageLog'), 'StaffWastageLog');
+const StaffInboundReceiving = lazyNamed(() => import('./components/branch/StaffInboundReceiving'), 'StaffInboundReceiving');
+const StaffShiftSummary = lazyNamed(() => import('./components/branch/StaffShiftSummary'), 'StaffShiftSummary');
 
 const MainShell: React.FC = () => {
   const { currentUser, themeMode } = useData();
@@ -47,7 +48,7 @@ const MainShell: React.FC = () => {
       );
     } else if (isBranchManager(currentUser)) {
       setActiveTab((prev) =>
-        ['log_validation', 'requisitions', 'orders', 'reorder', 'branch_analytics', 'analytics', 'sales'].includes(prev)
+        ['log_validation', 'current_stock', 'requisitions', 'orders', 'reorder', 'branch_analytics', 'analytics', 'sales'].includes(prev)
           ? prev
           : 'log_validation'
       );
@@ -112,7 +113,8 @@ const MainShell: React.FC = () => {
           />
 
         {/* View Content Enforcing 3-Tier RBAC Route Protection */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-7 animate-in fade-in duration-300">
+        <main className="mallow-main flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-7 animate-in fade-in duration-300">
+          <Suspense fallback={<div className="mallow-panel rounded-2xl p-8 text-sm text-neutral-500">Loading workspace…</div>}>
           {/* TIER 1: BRANCH_STAFF (Frontline Ground Operations) */}
           {isStaff && (
             <>
@@ -142,6 +144,7 @@ const MainShell: React.FC = () => {
           {isManager && (
             <>
               {activeTab === 'log_validation' && <ManagerLogValidation />}
+              {activeTab === 'current_stock' && <BranchCurrentStock />}
               {(activeTab === 'requisitions' || activeTab === 'orders' || activeTab === 'reorder') && (
                 <ManagerRequisitions />
               )}
@@ -151,6 +154,7 @@ const MainShell: React.FC = () => {
               {/* Fallback route guard: If manager attempts to navigate to any other tab */}
               {![
                 'log_validation',
+                'current_stock',
                 'requisitions',
                 'orders',
                 'reorder',
@@ -198,10 +202,11 @@ const MainShell: React.FC = () => {
               ].includes(activeTab) && <AdminOrders />}
             </>
           )}
+          </Suspense>
         </main>
 
         {/* Modern Compact Footer */}
-        <footer className="border-t border-neutral-200/60 dark:border-neutral-800/80 py-5 mt-auto text-center text-xs text-neutral-400">
+        <footer className="mallow-footer border-t border-neutral-200/60 dark:border-neutral-800/80 py-5 mt-auto text-center text-xs text-neutral-400">
           <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
             <p>
               <strong>VertexIS</strong> • Marsh Bites Gourmet Marshmallow Enterprise System
