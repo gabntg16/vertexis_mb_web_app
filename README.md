@@ -76,4 +76,4 @@ The current workspace contains no Flutter project directory. If a mobile compani
 
 ## Data and location assumptions
 
-Development fixtures use the Naga City commissary as headquarters and include sample branches. Replace fixture data with managed records before production use. Verify branch IDs, roles, tax settings, and document-retention requirements with the business owner before sharing the app outside the development team.
+Development fixtures use the Legazpi City commissary as headquarters and include sample branches. Replace fixture data with managed records before production use. Verify branch IDs, roles, tax settings, and document-retention requirements with the business owner before sharing the app outside the development team.
