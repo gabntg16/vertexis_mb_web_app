@@ -12,7 +12,7 @@ import marshbitesLogo from '../assets/images/marshbites_logo.jpg';
 import { Lock, Mail, ArrowRight, Sparkles, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export const LoginScreen: React.FC = () => {
-  const { loginWithFirebase, themeMode } = useData();
+  const { loginWithFirebase, switchUser, themeMode } = useData();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -31,6 +31,26 @@ export const LoginScreen: React.FC = () => {
 
     if (code === 'auth/internal-error-encountered') {
       return 'Firebase could not start the MFA SMS challenge. Check that this domain is authorized in Firebase Authentication and that Phone/MFA sign-in is enabled, then try Resend MFA code.';
+    }
+
+    if (code === 'auth/operation-not-allowed') {
+      return 'Email/password sign-in is disabled for this Firebase project. Enable it in Firebase Console → Authentication → Sign-in method.';
+    }
+
+    if (code === 'auth/invalid-credential' || code === 'auth/user-not-found' || code === 'auth/wrong-password') {
+      return 'The email or password is incorrect.';
+    }
+
+    if (code === 'auth/network-request-failed') {
+      return 'Firebase could not be reached. Check your internet connection and try again.';
+    }
+
+    if (code === 'functions/not-found' || code === 'functions/unavailable') {
+      return 'Firebase sign-in succeeded, but the VertexIS profile service is unavailable or this account is not linked to a profile. Deploy the Functions backend and provision the account, then try again.';
+    }
+
+    if (code === 'functions/failed-precondition') {
+      return 'This Firebase account is missing an email address required by VertexIS. Ask an administrator to provision the account.';
     }
 
     return authError instanceof Error ? authError.message : fallback;
@@ -305,6 +325,37 @@ export const LoginScreen: React.FC = () => {
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
+          )}
+
+          {import.meta.env.DEV && (
+            <div className="mt-7 border-t border-neutral-200 pt-5 text-left dark:border-neutral-800">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-neutral-400">
+                Development shortcuts
+              </p>
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                Local preview only. These buttons never ship in production builds.
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {[
+                  ['u-super-admin', 'HQ Admin'],
+                  ['u-legazpi-mgr', 'Legazpi Manager'],
+                  ['u-legazpi-staff', 'Legazpi Staff'],
+                  ['u-cabuyao-mgr', 'Cabuyao Manager'],
+                ].map(([userId, label]) => (
+                  <button
+                    key={userId}
+                    type="button"
+                    onClick={() => {
+                      switchUser(userId);
+                      setError(null);
+                    }}
+                    className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-semibold text-neutral-700 transition-colors hover:border-[#80C7F2] hover:bg-[#80C7F2]/10 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
 
         </div>

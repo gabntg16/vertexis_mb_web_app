@@ -3,7 +3,7 @@
  * The Marsh Bites Management System (VertexIS)
  * 
  * Standardized logistics interfaces and carrier portal helpers
- * for Naga Central Commissary nationwide dispatches.
+ * for Legazpi Central Commissary nationwide dispatches.
  */
 
 export interface JTSender {
@@ -117,16 +117,16 @@ export interface JTShippingLabelData {
   handlingInstructions: string[];
 }
 
-// Default Central Commissary Naga City Sender Configuration
+// Default Legazpi Central Commissary Sender Configuration
 export const COMMISSARY_SENDER: JTSender = {
   companyName: 'The Marsh Bites Enterprise (Central Commissary)',
-  name: 'Commissary Dispatch Officer (Naga City HQ)',
+  name: 'Commissary Dispatch Officer (Legazpi HQ)',
   mobile: '+63 917 555 6274',
   phone: '(054) 881-2490',
-  address: 'Zone 4, Concepcion Pequeña, Naga City (Near Almeda Highway)',
-  province: 'Camarines Sur',
-  city: 'Naga City',
-  district: 'Concepcion Pequeña',
+  address: 'Zone 1, Ville Amor, Legazpi City, Albay',
+  province: 'Albay',
+  city: 'Legazpi City',
+  district: 'Cabangan West',
   postalCode: '4400',
 };
 

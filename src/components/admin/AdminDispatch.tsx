@@ -205,8 +205,8 @@ export const AdminDispatch: React.FC = () => {
         createdAt: new Date().toISOString(),
         sender: {
           companyName: 'The Marsh Bites Enterprise (Central Commissary)',
-          hubName: 'Naga Central Commissary Hub',
-          address: 'Zone 4, Concepcion Pequeña, Naga City, Camarines Sur (Bicol Hub)',
+          hubName: 'Legazpi Central Commissary Hub',
+          address: 'Legazpi City, Albay (Bicol Hub)',
           contactPerson: 'Commissary Logistics Officer',
           phone: '+63 917 555 6274',
         },
@@ -269,8 +269,8 @@ export const AdminDispatch: React.FC = () => {
       createdAt: delivery.scheduledAt || new Date().toISOString(),
       sender: {
         companyName: 'The Marsh Bites Enterprise (Central Commissary)',
-        hubName: 'Naga Central Commissary Hub',
-        address: 'Zone 4, Concepcion Pequeña, Naga City, Camarines Sur',
+        hubName: 'Legazpi Central Commissary Hub',
+        address: 'Legazpi City, Albay',
         contactPerson: 'Commissary Logistics Officer',
         phone: '+63 917 555 6274',
       },
@@ -386,17 +386,14 @@ export const AdminDispatch: React.FC = () => {
                 <span>CENTRAL COMMISSARY DISPATCH</span>
               </span>
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#80C7F2]/20 text-[#1a7bb5] dark:text-[#80C7F2] border border-[#80C7F2]/30">
-                Naga City Hub (Camarines Sur)
-              </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                19+ Franchise Branches
+                Legazpi City Hub (Albay)
               </span>
             </div>
             <h1 className="text-2xl font-black tracking-tight text-neutral-900 dark:text-white">
-              Commissary Dispatch & Logistics Center
+              Commissary Dispatch Center
             </h1>
             <p className="text-xs text-neutral-500 max-w-2xl">
-              Dispatch approved franchise requisitions via In-House Logistics Fleet or Third-Party Couriers (J&T Express, LBC, Cargo). Generate official gate passes and notify branch managers in real time.
+              Dispatch approved branch requisitions .
             </p>
           </div>
 

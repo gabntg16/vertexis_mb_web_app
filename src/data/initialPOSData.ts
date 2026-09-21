@@ -270,9 +270,9 @@ export function generateInitialInventoryMovements(branches: Branch[], products: 
         previousStock: 0,
         newStock: 50,
         referenceNo: `DEL-MTO-08${branchIndex + 1}`,
-        performedBy: 'Central Naga Commissary Delivery',
+        performedBy: 'Legazpi Central Commissary Delivery',
         timestamp: new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString(),
-        notes: 'Dispatched from Naga Central Kitchen kettle batch',
+        notes: 'Dispatched from Legazpi Central Kitchen kettle batch',
       });
 
       // POS Sale movement

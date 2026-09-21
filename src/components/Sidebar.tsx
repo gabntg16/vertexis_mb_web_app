@@ -20,11 +20,6 @@ import {
   ShieldCheck,
   Store,
   MapPin,
-  UserCheck,
-  ChevronDown,
-  LogOut,
-  CloudOff,
-  RefreshCw,
   X,
   ChevronLeft,
   ChevronRight,
@@ -50,12 +45,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const {
     currentUser,
-    users,
     currentBranch,
-    syncState,
-    switchUser,
-    logout,
-    forceSyncCloud,
     pendingOrdersCount,
     readyForDispatchOrdersCount,
     deliveries,
@@ -63,8 +53,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     dailyShiftLogs,
   } = useData();
 
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   if (!currentUser) return null;
@@ -72,15 +60,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isSuper = isSuperAdmin(currentUser);
   const isManager = isBranchManager(currentUser);
   const isStaff = isBranchStaff(currentUser);
-
-  const handleManualSync = async () => {
-    try {
-      setIsManualSyncing(true);
-      await forceSyncCloud();
-    } finally {
-      setTimeout(() => setIsManualSyncing(false), 600);
-    }
-  };
 
   // Badge counts
   const branchInTransitCount = !isSuper && currentBranch
@@ -119,6 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // 1. BRANCH_STAFF Navigation: Render ONLY Frontline Tabs
   const staffTabs = [
+    { id: 'staff_dashboard', label: 'Operations Dashboard', icon: LayoutDashboard },
     { id: 'physical_counts', label: 'Daily Physical Counts', icon: ClipboardCheck },
     { id: 'manual_sales', label: 'Manual Sales Entry', icon: Receipt },
     { id: 'spoilage_wastage', label: 'Spoilage / Wastage', icon: Trash2 },
@@ -148,6 +128,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // 2. BRANCH_MANAGER Navigation: Render Store Leadership & Audit Tabs
   const managerTabs = [
+    { id: 'branch_analytics', label: 'Branch Dashboard & Analytics', icon: TrendingUp },
     { id: 'current_stock', label: 'Current Branch Stock', icon: Boxes },
     {
       id: 'log_validation',
@@ -163,11 +144,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: branchReadyOrdersCount > 0 ? branchReadyOrdersCount : undefined,
       badgeColor: 'bg-emerald-500 text-white',
     },
-    { id: 'branch_analytics', label: 'Branch Analytics', icon: TrendingUp },
   ];
 
   // 3. SUPER_ADMIN Navigation: Render HQ Executive & Network Tabs
   const adminPrimaryTabs = [
+    { id: 'network_analytics', label: 'Network Dashboard & Analytics', icon: TrendingUp },
     {
       id: 'requisition_approval',
       label: 'Requisition & Payment Approval',
@@ -181,7 +162,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ? 'bg-emerald-500 text-white'
           : 'bg-[#F37021] text-white',
     },
-    { id: 'network_analytics', label: 'Network Predictive Analytics', icon: TrendingUp },
     { id: 'master_pricing', label: 'Master Inventory & Pricing', icon: Tag },
   ];
 
@@ -199,7 +179,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'user_management', label: 'User Management', icon: Users },
   ];
 
-  const tabs = isStaff ? staffTabs : isManager ? managerTabs : [...adminPrimaryTabs, ...adminSecondaryTabs];
+  // Super Admin secondary operations are rendered in their dedicated
+  // "Central Commissary Network" group below. Keeping them out of the
+  // primary list prevents the navigation items from appearing twice.
+  const tabs = isStaff ? staffTabs : isManager ? managerTabs : adminPrimaryTabs;
 
   const handleTabClick = (tabId: string) => {
     setActiveTab(tabId);
@@ -273,7 +256,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               <p className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400 truncate tracking-tight mt-1">
                 {isSuper
-                  ? 'Central Commissary HQ'
+                  ? 'Legazpi Central Commissary HQ'
                   : `${currentBranch?.name?.replace('Marsh Bites ', '') || 'Branch'} Station`}
               </p>
             </div>
@@ -301,14 +284,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      {/* 3-Tier RBAC User & Role Switcher Card */}
+      {/* Current signed-in user and RBAC scope */}
       <div className="px-3 pt-3 pb-1">
         <div className="relative">
-          <button
-            id="user-switcher-btn"
-            onClick={() => setShowUserMenu(!showUserMenu)}
+          <div
+            id="current-user-card"
             className={`w-full flex items-center justify-between p-2.5 rounded-2xl border text-xs font-semibold transition-all ${currentRoleConfig.bg} hover:opacity-90`}
-            title="Switch User Role / Active Station"
+            title="Current signed-in user and access scope"
           >
             <div className="flex items-center space-x-2.5 min-w-0">
               <div className="p-1 rounded-lg bg-white/60 dark:bg-black/40 shrink-0">
@@ -331,68 +313,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </span>
                   </div>
                   <span className="text-[10px] text-neutral-500 dark:text-neutral-400 block truncate mt-0.5">
-                    {currentUser.name} • {isSuper ? 'Naga HQ' : currentBranch?.name?.replace('Marsh Bites - ', '') || 'Legazpi'}
+                    {currentUser.name} • {isSuper ? 'Legazpi HQ' : currentBranch?.name?.replace('Marsh Bites - ', '') || 'Legazpi'}
                   </span>
                 </div>
               )}
             </div>
-            {(!isCollapsed || isMobileOpen) && (
-              <ChevronDown className="w-3.5 h-3.5 opacity-60 shrink-0 ml-1" />
-            )}
-          </button>
+          </div>
 
-          {/* User Switcher Dropdown */}
-          {import.meta.env.DEV && showUserMenu && (
-            <>
-              <div className="fixed inset-0 z-50" onClick={() => setShowUserMenu(false)} />
-              <div className="absolute left-0 right-0 top-full mt-1.5 max-h-80 overflow-y-auto rounded-2xl shadow-2xl border z-50 p-2 text-xs bg-white dark:bg-[#1c1c1c] border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white">
-                <div className="px-2 py-1.5 border-b border-neutral-200 dark:border-neutral-800">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">
-                    Switch 3-Tier RBAC Station
-                  </p>
-                </div>
-                <div className="py-1 space-y-1">
-                  {users.map((u) => {
-                    const isSelected = u.id === currentUser.id;
-                    const uConfig = getRoleBadgeStyle(u);
-                    const UIcon = uConfig.icon;
-                    return (
-                      <button
-                        key={u.id}
-                        onClick={() => {
-                          switchUser(u.id);
-                          setShowUserMenu(false);
-                        }}
-                        className={`w-full text-left px-2.5 py-2 rounded-xl flex items-center justify-between text-xs transition-colors ${
-                          isSelected
-                            ? 'bg-[#80C7F2]/20 text-[#0c5077] dark:text-[#80C7F2] font-bold'
-                            : 'hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-2.5 truncate min-w-0">
-                          <UIcon className={`w-3.5 h-3.5 ${uConfig.iconColor} shrink-0`} />
-                          <div className="min-w-0 truncate">
-                            <div className="flex items-center space-x-1.5">
-                              <span className="truncate font-semibold">{u.name}</span>
-                              <span
-                                className={`text-[9px] px-1 py-0.2 rounded font-mono font-bold ${uConfig.badge}`}
-                              >
-                                {uConfig.label}
-                              </span>
-                            </div>
-                            <div className="text-[10px] text-neutral-400 truncate">
-                              {u.branchName || 'Headquarters'}
-                            </div>
-                          </div>
-                        </div>
-                        {isSelected && <UserCheck className="w-3.5 h-3.5 text-[#80C7F2] shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </>
-          )}
         </div>
       </div>
 
@@ -495,61 +422,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             })}
           </div>
         )}
-      </div>
 
-      {/* Bottom Controls / Utilities Section */}
-      <div className="p-3 border-t border-neutral-200/80 dark:border-neutral-800 bg-neutral-50/50 dark:bg-[#161616]/50 space-y-2">
-        {/* Firestore Sync Badge */}
-        <button
-          id="firestore-sync-status-btn"
-          onClick={handleManualSync}
-          className={`w-full flex items-center justify-between p-2 rounded-xl border text-[11px] font-semibold transition-all ${
-            syncState.status === 'connected'
-              ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/15'
-              : syncState.status === 'syncing' || isManualSyncing
-              ? 'bg-amber-500/10 border-amber-500/25 text-amber-700 dark:text-amber-300'
-              : 'bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-500'
-          }`}
-          title="Cloud Firestore Synchronization Status. Click to force sync."
-        >
-          <div className="flex items-center space-x-2 min-w-0">
-            {syncState.status === 'connected' && !isManualSyncing ? (
-              <>
-                <span className="relative flex h-2 w-2 shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                {(!isCollapsed || isMobileOpen) && <span>Cloud Synced</span>}
-              </>
-            ) : syncState.status === 'syncing' || isManualSyncing ? (
-              <>
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-500 shrink-0" />
-                {(!isCollapsed || isMobileOpen) && <span>Syncing Firestore...</span>}
-              </>
-            ) : (
-              <>
-                <CloudOff className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-                {(!isCollapsed || isMobileOpen) && <span>Offline Mode</span>}
-              </>
-            )}
-          </div>
-          {(!isCollapsed || isMobileOpen) && (
-            <span className="text-[10px] text-neutral-400 hover:underline">Sync</span>
-          )}
-        </button>
-
-        {/* Logout Button */}
-        <button
-          id="logout-btn"
-          onClick={logout}
-          className={`w-full flex items-center justify-center ${
-            !isCollapsed || isMobileOpen ? 'space-x-2 px-3 py-2 text-xs font-semibold' : 'p-2'
-          } rounded-xl border transition-colors bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer`}
-          title="Log Out"
-        >
-          <LogOut className="w-3.5 h-3.5 shrink-0" />
-          {(!isCollapsed || isMobileOpen) && <span>Log Out</span>}
-        </button>
       </div>
     </div>
   );

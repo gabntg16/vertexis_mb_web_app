@@ -59,7 +59,7 @@ export function generateAuditPDF(
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 116, 139);
-  doc.text('The Marsh Bites Management System • Naga Central Commissary & Legazpi Sub-Branch', 38, 18);
+  doc.text('The Marsh Bites Management System • Legazpi Central Commissary & Branch Network', 38, 18);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);

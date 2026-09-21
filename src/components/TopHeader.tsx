@@ -5,8 +5,6 @@ import {
   ShieldCheck,
   Store,
   MapPin,
-  UserCheck,
-  ChevronDown,
   Sun,
   Moon,
   CloudCheck,
@@ -35,6 +33,10 @@ import {
   Users,
   Tag,
   ArrowLeftRight,
+  UserRound,
+  LockKeyhole,
+  FileText,
+  Settings,
 } from 'lucide-react';
 import { filterNotificationsForUser } from '../utils/notificationUtils';
 import { NotificationBadgeGroup } from './common/NotificationBadgeGroup';
@@ -54,7 +56,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 }) => {
   const {
     currentUser,
-    users,
     currentBranch,
     themeMode,
     syncState,
@@ -62,20 +63,26 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     markAnnouncementAsRead,
     markAllAnnouncementsAsRead,
     toggleTheme,
-    switchUser,
-    logout,
     forceSyncCloud,
   } = useData();
 
-  const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotificationMenu, setShowNotificationMenu] = useState(false);
   const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<'all' | NotificationKind>('all');
 
   if (!currentUser) return null;
 
-  const isAdmin = currentUser.role === 'admin';
+  const isAdmin = isSuperAdmin(currentUser);
   const isDark = themeMode === 'dark';
+  const isSettingsActive = ['account_settings', 'privacy_settings', 'legal_terms'].includes(activeTab);
+  const currentRoleLabel = isSuperAdmin(currentUser)
+    ? 'HQ Super Admin'
+    : isBranchManager(currentUser)
+    ? 'Branch Manager'
+    : 'Branch Staff';
+  const currentScope = isSuperAdmin(currentUser)
+    ? 'Legazpi HQ'
+    : currentBranch?.name?.replace('Marsh Bites - ', '') || 'Branch Station';
 
   // Filter notifications specifically targeted to this user (WHO) and branch (WHERE)
   const userNotifications = useMemo(() => {
@@ -141,7 +148,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       icon: ShoppingBag,
     },
     branch_analytics: {
-      title: 'Branch Sales & Inventory Analytics',
+      title: 'Branch Dashboard & Analytics',
       subtitle: 'Track shrinkage, variance rates, and top moving flavors',
       icon: TrendingUp,
     },
@@ -156,7 +163,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       icon: ShoppingBag,
     },
     network_analytics: {
-      title: 'Network Predictive Analytics',
+      title: 'Network Dashboard & Analytics',
       subtitle: '19-Branch predictive demand forecasts & replenishment KPIs',
       icon: TrendingUp,
     },
@@ -168,20 +175,20 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     dashboard: {
       title: isAdmin ? 'Central Executive Overview' : 'Branch Overview',
       subtitle: isAdmin
-        ? 'Central Commissary KPI Dashboard • Naga City, Bicol'
-        : `${currentBranch?.name || 'Branch'} • Inter-Branch B2B Operations (Naga Commissary ↔ Legazpi)`,
+        ? 'Central Commissary KPI Dashboard • Legazpi City, Albay'
+        : `${currentBranch?.name || 'Branch'} • Inter-Branch B2B Operations (Legazpi Central Commissary ↔ Branch Network)`,
       icon: LayoutDashboard,
     },
     orders: {
       title: isAdmin ? 'Orders & Commissary Approvals' : 'Stock Requisitions & Reorders',
       subtitle: isAdmin
         ? 'Review & dispatch branch batch orders'
-        : 'Inter-branch ordering from Naga Central Commissary with auto-fill (α=0.3)',
+        : 'Inter-branch ordering from Legazpi Central Commissary with auto-fill (α=0.3)',
       icon: ShoppingBag,
     },
     reorder: {
       title: 'Stock Requisitions & Reorders',
-      subtitle: 'Inter-branch ordering from Naga Central Commissary with auto-fill (α=0.3)',
+      subtitle: 'Inter-branch ordering from Legazpi Central Commissary with auto-fill (α=0.3)',
       icon: ShoppingBag,
     },
     production: {
@@ -240,6 +247,26 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       title: isAdmin ? 'Headquarters Bulletins' : 'Commissary Bulletins',
       subtitle: 'Broadcast alerts and recipe updates across all 19 branches',
       icon: Megaphone,
+    },
+    staff_dashboard: {
+      title: 'Frontline Operations Dashboard',
+      subtitle: "Today's shift, receiving, counts, and sales workbench",
+      icon: LayoutDashboard,
+    },
+    account_settings: {
+      title: 'Account Settings',
+      subtitle: 'Review your profile, role, and assigned operating scope',
+      icon: UserRound,
+    },
+    privacy_settings: {
+      title: 'Privacy Settings',
+      subtitle: 'Control local notification and workspace preferences',
+      icon: LockKeyhole,
+    },
+    legal_terms: {
+      title: 'Terms & Legal',
+      subtitle: 'VertexIS operating terms and privacy responsibilities',
+      icon: FileText,
     },
   };
 
@@ -305,7 +332,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
-                  <CloudCheck className="w-3.5 h-3.5 hidden xs:inline" />
+                  <CloudCheck className="w-3.5 h-3.5" />
                   <span className="hidden md:inline">Synced</span>
                 </>
               ) : syncState.status === 'syncing' || isManualSyncing ? (
@@ -321,11 +348,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               )}
             </button>
 
-            {/* Switch User Dropdown */}
+            {/* Current signed-in user */}
             <div className="relative">
-              <button
-                id="top-user-switcher-btn"
-                onClick={() => setShowUserMenu(!showUserMenu)}
+              <div
+                id="top-current-user"
                 className={`mallow-header-control flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all shadow-xs ${
                   isSuperAdmin(currentUser)
                     ? 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20'
@@ -333,7 +359,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     ? 'bg-[#80C7F2]/10 border-[#80C7F2]/30 text-[#1a7bb5] dark:text-[#80C7F2] hover:bg-[#80C7F2]/20'
                     : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20'
                 }`}
-                title="Switch Station / User Role"
+                title={`${currentUser.name} - ${currentRoleLabel} - ${currentScope}`}
               >
                 {isSuperAdmin(currentUser) ? (
                   <ShieldCheck className="w-3.5 h-3.5 text-amber-500 shrink-0" />
@@ -342,79 +368,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 ) : (
                   <ClipboardCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                 )}
-                <span className="hidden sm:inline truncate max-w-[130px]">
-                  {isSuperAdmin(currentUser)
-                    ? 'HQ Super Admin'
-                    : isBranchManager(currentUser)
-                    ? `${currentBranch?.name?.replace('Marsh Bites - ', '') || 'Branch'} Lead`
-                    : `${currentBranch?.name?.replace('Marsh Bites - ', '') || 'Branch'} Staff`}
+                <span className="hidden sm:flex flex-col min-w-0 text-left leading-tight">
+                  <span className="truncate max-w-[150px]">{currentUser.name}</span>
+                  <span className="text-[9px] opacity-70 truncate max-w-[150px]">{currentRoleLabel} - {currentScope}</span>
                 </span>
-                <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
-              </button>
+              </div>
 
-              {import.meta.env.DEV && showUserMenu && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
-                  <div className="absolute right-0 mt-2 w-72 max-h-80 overflow-y-auto rounded-2xl shadow-2xl border z-50 p-2 text-xs bg-white dark:bg-[#1c1c1c] border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white">
-                    <div className="px-2.5 py-1.5 border-b border-neutral-200 dark:border-neutral-800">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">
-                        Switch 3-Tier RBAC Station
-                      </p>
-                    </div>
-                    <div className="py-1 space-y-1">
-                      {users.map((u) => {
-                        const isSelected = u.id === currentUser.id;
-                        const isSuperU = isSuperAdmin(u);
-                        const isManagerU = isBranchManager(u);
-                        return (
-                          <button
-                            key={u.id}
-                            onClick={() => {
-                              switchUser(u.id);
-                              setShowUserMenu(false);
-                            }}
-                            className={`w-full text-left px-2.5 py-2 rounded-xl flex items-center justify-between text-xs transition-colors ${
-                              isSelected
-                                ? 'bg-[#80C7F2]/20 text-[#0c5077] dark:text-[#80C7F2] font-bold'
-                                : 'hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200'
-                            }`}
-                          >
-                            <div className="flex items-center space-x-2 truncate min-w-0">
-                              {isSuperU ? (
-                                <ShieldCheck className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                              ) : isManagerU ? (
-                                <Store className="w-3.5 h-3.5 text-[#80C7F2] shrink-0" />
-                              ) : (
-                                <ClipboardCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                              )}
-                              <div className="truncate min-w-0">
-                                <div className="flex items-center space-x-1.5">
-                                  <span className="truncate font-semibold">{u.name}</span>
-                                  <span
-                                    className={`text-[9px] px-1 rounded font-mono ${
-                                      isSuperU
-                                        ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
-                                        : isManagerU
-                                        ? 'bg-sky-500/20 text-sky-700 dark:text-sky-300'
-                                        : 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
-                                    }`}
-                                  >
-                                    {isSuperU ? 'SUPER' : isManagerU ? 'MANAGER' : 'STAFF'}
-                                  </span>
-                                </div>
-                                <div className="text-[10px] text-neutral-400 truncate">
-                                  {u.branchName || 'Headquarters'}
-                                </div>
-                              </div>
-                            </div>
-                            {isSelected && <UserCheck className="w-3.5 h-3.5 text-[#80C7F2] shrink-0 ml-1" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
 
             {/* Notifications Popover */}
@@ -657,15 +616,22 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
             </button>
 
-            {/* Logout Text Button */}
+            {/* Settings */}
             <button
-              id="top-logout-btn"
-              onClick={logout}
-              className="mallow-header-control px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-red-600 dark:hover:text-red-400 cursor-pointer"
-              title="Log Out"
+              id="top-settings-btn"
+              type="button"
+              onClick={() => onNavigateTab?.('account_settings')}
+              className={`mallow-header-control p-2 rounded-xl border transition-colors ${
+                isSettingsActive
+                  ? 'bg-[#80C7F2]/20 border-[#80C7F2]/40 text-[#1a7bb5] dark:text-[#80C7F2]'
+                  : 'bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+              }`}
+              title="Account and workspace settings"
+              aria-label="Open account and workspace settings"
             >
-              Log Out
+              <Settings className="w-3.5 h-3.5" />
             </button>
+
           </div>
         </div>
       </div>

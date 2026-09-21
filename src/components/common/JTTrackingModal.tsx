@@ -328,7 +328,7 @@ export const JTTrackingModal: React.FC<JTTrackingModalProps> = ({
           }`}
         >
           <div className="text-[11px] text-neutral-500">
-            Naga Central Commissary Logistics
+            Legazpi Central Commissary Logistics
           </div>
           <button
             type="button"

@@ -99,7 +99,7 @@ export const ManagerBranchAnalytics: React.FC<ManagerBranchAnalyticsProps> = ({
         <div className="flex items-center space-x-2">
           <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-300 border border-violet-300 dark:border-violet-700/60">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Store Scope: {currentBranch?.name || 'Legazpi City'}</span>
+            <span>Store: {currentBranch?.name || 'Legazpi City'}</span>
           </span>
         </div>
       </div>
@@ -156,12 +156,6 @@ export const ManagerBranchAnalytics: React.FC<ManagerBranchAnalyticsProps> = ({
       {/* Demand Forecasting & Predictive Reorder Engine */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Sparkles className="w-5 h-5 text-sky-500" />
-            <h2 className="text-base font-bold text-neutral-900 dark:text-white">
-              Predictive Demand Forecasting & Restock Planner
-            </h2>
-          </div>
           {onNavigateToReorder && (
             <button
               type="button"

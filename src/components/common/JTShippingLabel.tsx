@@ -90,7 +90,7 @@ export const JTShippingLabel: React.FC<JTShippingLabelProps> = ({
     ? labelData.sender
     : {
         companyName: (labelData as JTShippingLabelData).sender.companyName,
-        hubName: 'Naga Central Commissary Hub',
+        hubName: 'Legazpi Central Commissary Hub',
         address: (labelData as JTShippingLabelData).sender.address,
         contactPerson: (labelData as JTShippingLabelData).sender.name,
         phone: (labelData as JTShippingLabelData).sender.mobile,
@@ -209,7 +209,7 @@ export const JTShippingLabel: React.FC<JTShippingLabelProps> = ({
                   Consignment Dispatch Manifest & Gate Pass
                 </h2>
                 <p className="text-[10px] text-neutral-600 leading-tight">
-                  Zone 4, Concepcion Pequeña, Naga City, Camarines Sur (Bicol Hub)
+                  Legazpi City, Albay (Bicol Hub)
                 </p>
               </div>
 
@@ -391,7 +391,7 @@ export const JTShippingLabel: React.FC<JTShippingLabelProps> = ({
 
             {/* Document Footer */}
             <div className="mt-3 pt-1 border-t border-dashed border-neutral-300 text-[8px] text-neutral-500 flex justify-between font-mono">
-              <span>The Marsh Bites Enterprise System • Central Commissary Naga</span>
+              <span>The Marsh Bites Enterprise System • Legazpi Central Commissary</span>
               <span>Generated: {new Date().toLocaleString()}</span>
             </div>
           </div>

@@ -124,7 +124,7 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
               Welcome to VertexIS
             </h1>
             <p className="text-xs sm:text-sm text-neutral-600 dark:text-neutral-300 mt-1 sm:mt-1.5 font-medium leading-relaxed">
-              Good to see you. Your Naga City headquarters is ready to help you manage 19 franchise branches, commissary production, order approvals, and demand insights.
+              Good to see you. Your Legazpi City headquarters is ready to help you manage all franchise branches.
             </p>
           </div>
 
@@ -292,7 +292,7 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-neutral-500 truncate mt-0.5">
-                Fresh gourmet marshmallows cooked to order upon branch requisition approval
+                {/*Fresh gourmet marshmallows cooked to order upon branch requisition approval*/}
               </p>
             </div>
           </div>

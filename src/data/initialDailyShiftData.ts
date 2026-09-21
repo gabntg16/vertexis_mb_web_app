@@ -188,7 +188,7 @@ export function generateInitialDailyShiftLogs(): DailyShiftLog[] {
         {
           id: 'rec-leg-01',
           manifestNumber: 'MNF-NAGA-2026-0901',
-          supplierOrSource: 'Naga City Commissary Hub',
+          supplierOrSource: 'Legazpi Central Commissary Hub',
           productId: 'p3',
           productName: 'Caramel Macchiato & Biscoff Marshmallow',
           expectedUnits: 20,
@@ -285,7 +285,7 @@ export function generateInitialInterBranchTransfers(): InterBranchTransfer[] {
       sourceBranchId: 'b-legazpi',
       sourceBranchName: 'The Marsh Bites Legazpi City',
       targetBranchId: 'b-naga',
-      targetBranchName: 'The Marsh Bites Naga Commissary Hub',
+      targetBranchName: 'The Marsh Bites Naga Branch',
       targetAddress: 'Magsaysay Ave, Naga City, Camarines Sur',
       items: [
         { productId: 'p1', productName: 'Oreo Cookies Gourmet Marshmallow', quantity: 25 },

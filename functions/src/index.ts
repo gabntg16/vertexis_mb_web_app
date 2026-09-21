@@ -1,15 +1,31 @@
 import { randomBytes } from 'node:crypto';
 import { initializeApp } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { Auth, getAuth } from 'firebase-admin/auth';
+import { Firestore, getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall, CallableRequest } from 'firebase-functions/v2/https';
+import { onInit } from 'firebase-functions/v2/core';
 import { setGlobalOptions } from 'firebase-functions/v2/options';
 
-initializeApp();
 setGlobalOptions({ region: 'asia-southeast1', maxInstances: 10 });
 
-const adminAuth = getAuth();
-const db = getFirestore('marshbites-mbms-db');
+let adminAuth: Auth | undefined;
+let db: Firestore | undefined;
+
+onInit(() => {
+  const app = initializeApp();
+  adminAuth = getAuth(app);
+  db = getFirestore(app, 'marshbites-mbms-db');
+});
+
+function getAdminAuth(): Auth {
+  if (!adminAuth) throw new Error('Firebase Admin Auth has not been initialized.');
+  return adminAuth;
+}
+
+function getDb(): Firestore {
+  if (!db) throw new Error('Firebase Admin Firestore has not been initialized.');
+  return db;
+}
 
 type AccountRole = 'Branch Manager' | 'Staff' | 'Cashier' | 'Inventory Specialist';
 type ProvisionPayload = {
@@ -83,7 +99,7 @@ export const provisionUser = onCall(async (request) => {
     throw new HttpsError('invalid-argument', 'Branch role is invalid.');
   }
 
-  const branchSnapshot = branchId ? await db.doc(`branches/${branchId}`).get() : null;
+  const branchSnapshot = branchId ? await getDb().doc(`branches/${branchId}`).get() : null;
   if (branchId && !branchSnapshot?.exists) {
     throw new HttpsError('not-found', 'The selected branch does not exist.');
   }
@@ -91,7 +107,7 @@ export const provisionUser = onCall(async (request) => {
   const password = temporaryPassword();
   let userRecord;
   try {
-    userRecord = await adminAuth.createUser({ email, displayName: name, password });
+    userRecord = await getAdminAuth().createUser({ email, displayName: name, password });
   } catch (error) {
     const code = error instanceof Error && 'code' in error ? String((error as { code?: unknown }).code) : '';
     if (code.includes('email-already-exists')) {
@@ -111,15 +127,15 @@ export const provisionUser = onCall(async (request) => {
   };
 
   try {
-    await adminAuth.setCustomUserClaims(userRecord.uid, {
+    await getAdminAuth().setCustomUserClaims(userRecord.uid, {
       role: normalizedProfileRole(role),
       ...(branchId ? { branchId } : {}),
     });
 
-    const batch = db.batch();
-    batch.set(db.doc(`users/${userRecord.uid}`), profile);
+    const batch = getDb().batch();
+    batch.set(getDb().doc(`users/${userRecord.uid}`), profile);
     if (branchId && branchRole) {
-      batch.set(db.doc(`branch_accounts/${userRecord.uid}`), {
+      batch.set(getDb().doc(`branch_accounts/${userRecord.uid}`), {
         id: userRecord.uid,
         branchId,
         branchName: branchSnapshot?.data()?.name || '',
@@ -138,27 +154,27 @@ export const provisionUser = onCall(async (request) => {
 
     let passwordResetLink: string | undefined;
     try {
-      passwordResetLink = await adminAuth.generatePasswordResetLink(email);
+      passwordResetLink = await getAdminAuth().generatePasswordResetLink(email);
     } catch {
       // Password reset link generation depends on Firebase Auth action-link configuration.
     }
 
     return { user: profile, accountId: branchId && branchRole ? userRecord.uid : undefined, passwordResetLink };
   } catch (error) {
-    await adminAuth.deleteUser(userRecord.uid).catch(() => undefined);
+    await getAdminAuth().deleteUser(userRecord.uid).catch(() => undefined);
     throw error instanceof HttpsError ? error : new HttpsError('internal', 'The account profile could not be saved.');
   }
 });
 
 export const resolveMyProfile = onCall(async (request) => {
   const authContext = requireAuthenticated(request);
-  const profileRef = db.doc(`users/${authContext.uid}`);
+  const profileRef = getDb().doc(`users/${authContext.uid}`);
   const profileSnapshot = await profileRef.get();
   if (profileSnapshot.exists) return { user: { ...profileSnapshot.data(), id: authContext.uid, firebaseUid: authContext.uid } };
 
   const email = authContext.token.email;
   if (typeof email !== 'string') throw new HttpsError('failed-precondition', 'The Firebase account has no email address.');
-  const legacySnapshot = await db.collection('users').where('email', '==', email.toLowerCase()).limit(1).get();
+  const legacySnapshot = await getDb().collection('users').where('email', '==', email.toLowerCase()).limit(1).get();
   if (legacySnapshot.empty) throw new HttpsError('not-found', 'No VertexIS profile is linked to this Firebase account.');
 
   const legacyProfile = legacySnapshot.docs[0].data();
@@ -178,10 +194,10 @@ export const resolveMyProfile = onCall(async (request) => {
 export const resetUserPassword = onCall(async (request) => {
   requireAdmin(request);
   const accountId = getString((request.data as { accountId?: unknown } | undefined)?.accountId, 'Account', 128);
-  const accountSnapshot = await db.doc(`branch_accounts/${accountId}`).get();
+  const accountSnapshot = await getDb().doc(`branch_accounts/${accountId}`).get();
   if (!accountSnapshot.exists) throw new HttpsError('not-found', 'The account does not exist.');
   const email = getEmail(accountSnapshot.data()?.email);
-  const passwordResetLink = await adminAuth.generatePasswordResetLink(email);
+  const passwordResetLink = await getAdminAuth().generatePasswordResetLink(email);
   await accountSnapshot.ref.set({ credentialsSent: false, credentialsResetAt: FieldValue.serverTimestamp() }, { merge: true });
   return { passwordResetLink };
 });
@@ -194,22 +210,22 @@ export const updateUserAccess = onCall(async (request) => {
   if (!role) throw new HttpsError('invalid-argument', 'Role must be admin or branch.');
   const branchId = role === 'branch' ? getString(payload.branchId, 'Branch', 80) : undefined;
 
-  const legacySnapshot = await db.doc(`users/${userId}`).get();
+  const legacySnapshot = await getDb().doc(`users/${userId}`).get();
   if (!legacySnapshot.exists) throw new HttpsError('not-found', 'The user profile does not exist.');
   const profileData = legacySnapshot.data() || {};
   let targetUid = typeof profileData.firebaseUid === 'string' ? profileData.firebaseUid : userId;
   if (!profileData.firebaseUid && typeof profileData.email === 'string') {
     try {
-      targetUid = (await adminAuth.getUserByEmail(profileData.email)).uid;
+      targetUid = (await getAdminAuth().getUserByEmail(profileData.email)).uid;
     } catch {
       throw new HttpsError('failed-precondition', 'Link this profile to a Firebase Auth account first.');
     }
   }
 
-  const branchSnapshot = branchId ? await db.doc(`branches/${branchId}`).get() : null;
+  const branchSnapshot = branchId ? await getDb().doc(`branches/${branchId}`).get() : null;
   if (branchId && !branchSnapshot?.exists) throw new HttpsError('not-found', 'The selected branch does not exist.');
 
-  await adminAuth.setCustomUserClaims(targetUid, {
+  await getAdminAuth().setCustomUserClaims(targetUid, {
     role: normalizedProfileRole(role),
     ...(branchId ? { branchId } : {}),
   });
@@ -223,6 +239,6 @@ export const updateUserAccess = onCall(async (request) => {
   };
   if (branchId) updatedProfile.branchId = branchId;
   else delete updatedProfile.branchId;
-  await db.doc(`users/${targetUid}`).set(updatedProfile);
+  await getDb().doc(`users/${targetUid}`).set(updatedProfile);
   return { user: updatedProfile };
 });

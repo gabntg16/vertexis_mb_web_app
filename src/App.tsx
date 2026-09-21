@@ -25,11 +25,13 @@ const ManagerLogValidation = lazyNamed(() => import('./components/branch/Manager
 const ManagerRequisitions = lazyNamed(() => import('./components/branch/ManagerRequisitions'), 'ManagerRequisitions');
 const ManagerBranchAnalytics = lazyNamed(() => import('./components/branch/ManagerBranchAnalytics'), 'ManagerBranchAnalytics');
 const BranchCurrentStock = lazyNamed(() => import('./components/branch/BranchCurrentStock'), 'BranchCurrentStock');
+const StaffDashboard = lazyNamed(() => import('./components/branch/StaffDashboard'), 'StaffDashboard');
 const StaffPhysicalCounts = lazyNamed(() => import('./components/branch/StaffPhysicalCounts'), 'StaffPhysicalCounts');
 const StaffManualSales = lazyNamed(() => import('./components/branch/StaffManualSales'), 'StaffManualSales');
 const StaffWastageLog = lazyNamed(() => import('./components/branch/StaffWastageLog'), 'StaffWastageLog');
 const StaffInboundReceiving = lazyNamed(() => import('./components/branch/StaffInboundReceiving'), 'StaffInboundReceiving');
 const StaffShiftSummary = lazyNamed(() => import('./components/branch/StaffShiftSummary'), 'StaffShiftSummary');
+const SettingsPage = lazyNamed(() => import('./components/settings/SettingsPage'), 'SettingsPage');
 
 const MainShell: React.FC = () => {
   const { currentUser, themeMode } = useData();
@@ -42,22 +44,22 @@ const MainShell: React.FC = () => {
 
     if (isBranchStaff(currentUser)) {
       setActiveTab((prev) =>
-        ['physical_counts', 'manual_sales', 'spoilage_wastage', 'wastage', 'inbound_receiving', 'receiving'].includes(prev)
+        ['staff_dashboard', 'physical_counts', 'manual_sales', 'spoilage_wastage', 'wastage', 'inbound_receiving', 'receiving', 'shift_summary', 'account_settings', 'privacy_settings', 'legal_terms'].includes(prev)
           ? prev
-          : 'physical_counts'
+          : 'staff_dashboard'
       );
     } else if (isBranchManager(currentUser)) {
       setActiveTab((prev) =>
-        ['log_validation', 'current_stock', 'requisitions', 'orders', 'reorder', 'branch_analytics', 'analytics', 'sales'].includes(prev)
+        ['branch_analytics', 'log_validation', 'current_stock', 'requisitions', 'orders', 'reorder', 'analytics', 'sales', 'account_settings', 'privacy_settings', 'legal_terms'].includes(prev)
           ? prev
-          : 'log_validation'
+          : 'branch_analytics'
       );
     } else if (isSuperAdmin(currentUser)) {
       setActiveTab((prev) =>
         [
+          'network_analytics',
           'requisition_approval',
           'orders',
-          'network_analytics',
           'dashboard',
           'analytics',
           'forecasting',
@@ -71,9 +73,12 @@ const MainShell: React.FC = () => {
           'calendar',
           'announcements',
           'user_management',
+          'account_settings',
+          'privacy_settings',
+          'legal_terms',
         ].includes(prev)
           ? prev
-          : 'requisition_approval'
+          : 'network_analytics'
       );
     }
     setIsMobileOpen(false);
@@ -118,6 +123,7 @@ const MainShell: React.FC = () => {
           {/* TIER 1: BRANCH_STAFF (Frontline Ground Operations) */}
           {isStaff && (
             <>
+              {activeTab === 'staff_dashboard' && <StaffDashboard onNavigateTab={setActiveTab} />}
               {activeTab === 'physical_counts' && <StaffPhysicalCounts onNavigateTab={setActiveTab} />}
               {activeTab === 'manual_sales' && <StaffManualSales onNavigateTab={setActiveTab} />}
               {(activeTab === 'spoilage_wastage' || activeTab === 'wastage') && (
@@ -127,8 +133,12 @@ const MainShell: React.FC = () => {
                 <StaffInboundReceiving onNavigateTab={setActiveTab} />
               )}
               {activeTab === 'shift_summary' && <StaffShiftSummary onNavigateTab={setActiveTab} />}
+              {['account_settings', 'privacy_settings', 'legal_terms'].includes(activeTab) && (
+                <SettingsPage section={activeTab as 'account_settings' | 'privacy_settings' | 'legal_terms'} onNavigateTab={setActiveTab} />
+              )}
               {/* Fallback route guard: If staff attempts to navigate to any other tab */}
               {![
+                'staff_dashboard',
                 'physical_counts',
                 'manual_sales',
                 'spoilage_wastage',
@@ -136,6 +146,9 @@ const MainShell: React.FC = () => {
                 'inbound_receiving',
                 'receiving',
                 'shift_summary',
+                'account_settings',
+                'privacy_settings',
+                'legal_terms',
               ].includes(activeTab) && <StaffPhysicalCounts onNavigateTab={setActiveTab} />}
             </>
           )}
@@ -151,16 +164,22 @@ const MainShell: React.FC = () => {
               {(activeTab === 'branch_analytics' || activeTab === 'analytics' || activeTab === 'sales') && (
                 <ManagerBranchAnalytics onNavigateToReorder={() => setActiveTab('requisitions')} />
               )}
+              {['account_settings', 'privacy_settings', 'legal_terms'].includes(activeTab) && (
+                <SettingsPage section={activeTab as 'account_settings' | 'privacy_settings' | 'legal_terms'} onNavigateTab={setActiveTab} />
+              )}
               {/* Fallback route guard: If manager attempts to navigate to any other tab */}
               {![
+                'branch_analytics',
                 'log_validation',
                 'current_stock',
                 'requisitions',
                 'orders',
                 'reorder',
-                'branch_analytics',
                 'analytics',
                 'sales',
+                'account_settings',
+                'privacy_settings',
+                'legal_terms',
               ].includes(activeTab) && <ManagerLogValidation />}
             </>
           )}
@@ -182,6 +201,9 @@ const MainShell: React.FC = () => {
               {activeTab === 'calendar' && <AdminCalendar />}
               {activeTab === 'announcements' && <AdminAnnouncements />}
               {activeTab === 'user_management' && <AdminUserManagement />}
+              {['account_settings', 'privacy_settings', 'legal_terms'].includes(activeTab) && (
+                <SettingsPage section={activeTab as 'account_settings' | 'privacy_settings' | 'legal_terms'} onNavigateTab={setActiveTab} />
+              )}
               {/* Fallback route guard */}
               {![
                 'requisition_approval',
@@ -199,6 +221,10 @@ const MainShell: React.FC = () => {
                 'sales',
                 'calendar',
                 'announcements',
+                'user_management',
+                'account_settings',
+                'privacy_settings',
+                'legal_terms',
               ].includes(activeTab) && <AdminOrders />}
             </>
           )}
@@ -212,7 +238,7 @@ const MainShell: React.FC = () => {
               <strong>VertexIS</strong> • Marsh Bites Gourmet Marshmallow Enterprise System
             </p>
             <p className="text-[11px]">
-              Commissary: Naga City, Bicol • 19 Nationwide Franchise Branches • 3-Tier RBAC
+              Commissary: Legazpi City, Albay • 19 Nationwide Franchise Branches • 3-Tier RBAC
             </p>
           </div>
         </footer>

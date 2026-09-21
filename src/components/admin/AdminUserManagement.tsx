@@ -34,7 +34,7 @@ export const AdminUserManagement: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [newName, setNewName] = useState<string>('');
   const [newEmail, setNewEmail] = useState<string>('');
-  const [newRole, setNewRole] = useState<'admin' | 'staff'>('staff');
+  const [newRole, setNewRole] = useState<'admin' | 'branch' | 'staff'>('staff');
   const [newBranchId, setNewBranchId] = useState<string>('b-legazpi');
   const [passwordResetLink, setPasswordResetLink] = useState<string | null>(null);
 
@@ -98,7 +98,8 @@ export const AdminUserManagement: React.FC = () => {
         email: newEmail.trim().toLowerCase(),
         role: newRole === 'admin' ? 'admin' : 'branch',
         branchId: newRole === 'admin' ? undefined : newBranchId,
-        branchRole: newRole === 'admin' ? undefined : 'Staff',
+        branchRole:
+          newRole === 'admin' ? undefined : newRole === 'branch' ? 'Branch Manager' : 'Staff',
       });
       addNewUser(result.user);
 
@@ -394,10 +395,11 @@ export const AdminUserManagement: React.FC = () => {
                 </label>
                 <select
                   value={newRole}
-                  onChange={(e) => setNewRole(e.target.value as 'admin' | 'staff')}
+                  onChange={(e) => setNewRole(e.target.value as 'admin' | 'branch' | 'staff')}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-[#121212] text-neutral-900 dark:text-white focus:ring-2 focus:ring-purple-500"
                 >
                   <option value="staff">Staff</option>
+                  <option value="branch">Branch Manager</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>

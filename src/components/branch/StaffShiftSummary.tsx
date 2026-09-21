@@ -289,7 +289,7 @@ export const StaffShiftSummary: React.FC<StaffShiftSummaryProps> = ({ onNavigate
             <span className="text-xs font-normal text-neutral-400">packs</span>
           </div>
           <div className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
-            From Naga City Commissary
+            From Legazpi Central Commissary
           </div>
         </div>
       </div>
@@ -595,7 +595,7 @@ export const StaffShiftSummary: React.FC<StaffShiftSummaryProps> = ({ onNavigate
                 {savedInbound.map((item) => (
                   <tr key={item.id} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30">
                     <td className="py-2.5 px-4 font-mono font-semibold text-neutral-800 dark:text-neutral-200">
-                      {item.manifestNumber || 'MNF-NAGA'}
+                      {item.manifestNumber || 'MNF-LEG'}
                     </td>
                     <td className="py-2.5 px-4 font-semibold text-neutral-900 dark:text-white">
                       {item.productName}

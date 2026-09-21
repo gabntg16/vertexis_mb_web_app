@@ -120,17 +120,17 @@ export const AdminPaymentVerificationQueue: React.FC = () => {
         <div>
           <div className="flex items-center space-x-2">
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#F37021] text-white">
-              B2B Treasury Verification
+              Proof of Payment(PoP)Verification
             </span>
             <span className="text-xs font-mono text-neutral-400">
               {pendingVerificationOrders.length} Pending Approval
             </span>
           </div>
           <h1 className="text-2xl font-black tracking-tight mt-1">
-            Proof of Payment (PoP) Verification Queue
+            PoP Verification Queue
           </h1>
           <p className="text-xs text-neutral-500 font-medium">
-            Inspect digital bank transfer slips and e-wallet screenshots attached by Franchise Branch Managers to unlock commissary production batching.
+            Inspect digital bank transfer slips and e-wallet screenshots attached by Branch Managers to unlock commissary production batching.
           </p>
         </div>
 

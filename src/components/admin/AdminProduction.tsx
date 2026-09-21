@@ -251,15 +251,11 @@ export const AdminProduction: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="min-w-0">
-          <div className="inline-flex items-center space-x-1.5 text-xs font-bold text-[#F37021] mb-1">
-            <Sparkles className="w-3.5 h-3.5 shrink-0" />
-            <span>Made-to-Order Confectionery Management</span>
-          </div>
           <h1 className="text-xl sm:text-2xl font-black tracking-tight text-neutral-900 dark:text-white">
             Central Commissary & Production Batches
           </h1>
           <p className="text-xs text-neutral-500 font-medium mt-0.5 max-w-2xl">
-            Production is driven by made-to-order branch requisitions. Track live kettle whips, curing slabs, and dispatch readiness.
+            Production is driven by made-to-order branch requisitions.
           </p>
         </div>
 
@@ -297,14 +293,14 @@ export const AdminProduction: React.FC = () => {
             <ShoppingBag className="w-4 h-4 text-[#F37021]" />
           </div>
           <p className="text-2xl font-black text-[#F37021]">{totalRequisitionUnits} <span className="text-xs font-medium text-neutral-400">units</span></p>
-          <p className="text-[11px] text-neutral-500 mt-1">Made-to-order requests from branches</p>
+          <p className="text-[11px] text-neutral-500 mt-1"> </p>
         </div>
 
         <div className={`p-4 sm:p-5 rounded-3xl border transition-all ${
           isDark ? 'bg-[#161616] border-neutral-800' : 'bg-white border-amber-500/20 shadow-xs'
         }`}>
           <div className="flex items-center justify-between text-neutral-400 mb-1">
-            <span className="text-xs font-bold uppercase tracking-wider">Live In-Kettle & Curing</span>
+            <span className="text-xs font-bold uppercase tracking-wider">Live In-Kettle</span>
             <Flame className="w-4 h-4 text-amber-500" />
           </div>
           <p className="text-2xl font-black text-amber-500">{totalInProductionUnits} <span className="text-xs font-medium text-neutral-400">units</span></p>
@@ -319,7 +315,7 @@ export const AdminProduction: React.FC = () => {
             <Package className="w-4 h-4 text-[#80C7F2]" />
           </div>
           <p className="text-2xl font-black text-[#80C7F2]">{totalBufferUnits} <span className="text-xs font-medium text-neutral-400">units</span></p>
-          <p className="text-[11px] text-neutral-500 mt-1">HQ finished buffer for urgent restocks</p>
+          <p className="text-[11px] text-neutral-500 mt-1"> </p>
         </div>
 
         <div className={`p-4 sm:p-5 rounded-3xl border transition-all ${
@@ -345,7 +341,7 @@ export const AdminProduction: React.FC = () => {
           }`}
         >
           <Building2 className="w-4 h-4 shrink-0" />
-          <span>Branch Requisitions Pipeline ({activeMTOOrders.length})</span>
+          <span>Branch Requisitions ({activeMTOOrders.length})</span>
         </button>
 
         <button
@@ -389,7 +385,7 @@ export const AdminProduction: React.FC = () => {
       {activeSubTab === 'pipeline' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-            <h2 className="text-base font-bold">Made-to-Order Branch Requisitions</h2>
+            <h2 className="text-base font-bold">MTO Branch Requisitions</h2>
             <span className="text-xs text-neutral-500 font-medium">
               Orders automatically create kitchen production batches upon approval or kitchen dispatch.
             </span>

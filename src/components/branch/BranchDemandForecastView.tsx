@@ -65,17 +65,17 @@ export const BranchDemandForecastView: React.FC<BranchDemandForecastViewProps> =
         <div>
           <div className="flex items-center space-x-2">
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#F37021] text-white">
-              Single Exponential Smoothing (α = 0.3)
+              Single Exponential Smoothing
             </span>
             <span className="text-xs font-mono text-neutral-400">
               Branch: {currentBranch?.name} ({currentBranch?.code})
             </span>
           </div>
           <h1 className="text-2xl font-black tracking-tight mt-1">
-            Predictive Demand & Reorder Analytics
+            Predictive Demand Analytics
           </h1>
           <p className="text-xs text-neutral-500 font-medium">
-            AI-modeled replenishment suggestions balancing 14-day historical sales velocity, transit lead time, and safety buffer stock.
+            Automatic replenishment suggestions balancing 14-day historical sales velocity, transit lead time, and safety buffer stock.
           </p>
         </div>
 
@@ -85,7 +85,7 @@ export const BranchDemandForecastView: React.FC<BranchDemandForecastViewProps> =
           className="px-5 py-2.5 rounded-2xl bg-[#F37021] text-white font-bold text-xs sm:text-sm hover:bg-[#d85e15] shadow-md transition-all flex items-center space-x-2 self-start sm:self-auto cursor-pointer"
         >
           <Sparkles className="w-4 h-4" />
-          <span>Apply to Commissary Requisition</span>
+          <span>Create Order</span>
         </button>
       </div>
 
@@ -102,11 +102,11 @@ export const BranchDemandForecastView: React.FC<BranchDemandForecastViewProps> =
             <div className="flex items-center space-x-2">
               <Sparkles className="w-4 h-4 text-[#F37021]" />
               <h3 className="text-sm font-black text-neutral-900 dark:text-white">
-                Exponential Smoothing Model Specification: S_t = 0.3·Y_t + 0.7·S_{'{t-1}'}
+                Replenish Suggestion & Stock Alert:
               </h3>
             </div>
             <p className="text-xs text-neutral-600 dark:text-neutral-400">
-              Smooths daily sales fluctuations with a <strong>0.3 smoothing constant (alpha)</strong>. Spoilage and write-offs are automatically removed from Y_t to prevent bullwhip distortion.
+              Calculates stable demand trends using a <strong>0.3 smoothing factor (alpha)</strong>. while filtering out inventory waste to prevent ordering errors.
             </p>
           </div>
 

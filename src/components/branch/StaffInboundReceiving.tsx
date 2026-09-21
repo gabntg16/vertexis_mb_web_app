@@ -75,8 +75,8 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
   }, [products]);
 
   // Manifest Header State
-  const [manifestNumber, setManifestNumber] = useState<string>('MNF-NAGA-2026-0902');
-  const [supplierOrSource, setSupplierOrSource] = useState<string>('Naga City Commissary Hub');
+  const [manifestNumber, setManifestNumber] = useState<string>('MNF-LEG-2026-0902');
+  const [supplierOrSource, setSupplierOrSource] = useState<string>('Legazpi Central Commissary Hub');
   const [courierNotes, setCourierNotes] = useState<string>('Courier J&T Express • Thermal tamper seal intact');
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
   const [showConfirmVerifyModal, setShowConfirmVerifyModal] = useState<boolean>(false);
@@ -140,7 +140,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
     const isJT =
       delivery.dispatchMethod === 'jt_express' ||
       (delivery.courierName && delivery.courierName.toLowerCase().includes('j&t'));
-    setSupplierOrSource('Naga City Commissary Hub');
+    setSupplierOrSource('Legazpi Central Commissary Hub');
     setCourierNotes(
       `${isJT ? 'Courier: J&T Express' : 'Courier: ' + (delivery.courierName || 'In-House Fleet')} • Waybill: ${
         trackingNo || 'N/A'
@@ -335,7 +335,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
 
       return {
         manifestNumber: manifestNumber.trim(),
-        supplierOrSource: supplierOrSource.trim() || 'Naga City Commissary Hub',
+        supplierOrSource: supplierOrSource.trim() || 'Legazpi Central Commissary Hub',
         productId: prod.id,
         productName: `${prod.flavor} (${prod.name})`,
         expectedUnits: Math.max(0, Number(line.expectedUnits) || 0),
@@ -357,7 +357,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
 
       // Prepare a new manifest number and reset lines for subsequent deliveries
       const nextSeq = Math.floor(1000 + Math.random() * 9000);
-      setManifestNumber(`MNF-NAGA-2026-${nextSeq}`);
+      setManifestNumber(`MNF-LEG-2026-${nextSeq}`);
       setCourierNotes('Thermal tamper seal intact');
       const p1 = marshmallowProducts[0]?.id || 'p1';
       setManifestLines([
@@ -380,8 +380,8 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
   // Delete draft and restart transaction from scratch
   const handleConfirmRestartDraft = () => {
     const nextSeq = Math.floor(1000 + Math.random() * 9000);
-    setManifestNumber(`MNF-NAGA-2026-${nextSeq}`);
-    setSupplierOrSource('Naga City Commissary Hub');
+    setManifestNumber(`MNF-LEG-2026-${nextSeq}`);
+    setSupplierOrSource('Legazpi Central Commissary Hub');
     setCourierNotes('Courier J&T Express • Thermal tamper seal intact');
     const p1 = marshmallowProducts[0]?.id || 'p1';
     setManifestLines([
@@ -492,7 +492,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                 Inbound Receiving & Multi-Item Verification
               </h1>
               <p className="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400">
-                Inspect, tally, and batch-record multi-item commissary shipments from Naga City Commissary Hub
+                Inspect, tally, and batch-record multi-item commissary shipments from Legazpi Central Commissary Hub
               </p>
             </div>
           </div>
@@ -560,7 +560,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
           <Info className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
           <div className="text-xs sm:text-sm text-neutral-700 dark:text-neutral-300">
             <span className="font-bold text-neutral-900 dark:text-white">Multi-Item Delivery Receiving Standards:</span>{' '}
-            Commissary shipments from Naga City Commissary Hub often bundle multiple marshmallow flavors in one manifest. Enter all flavor lines and their corresponding quantities below, inspect thermal seals, and record the entire manifest in one batch.
+            Commissary shipments from Legazpi Central Commissary Hub often bundle multiple marshmallow flavors in one manifest. Enter all flavor lines and their corresponding quantities below, inspect thermal seals, and record the entire manifest in one batch.
           </div>
         </div>
       </div>
@@ -766,7 +766,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                   value={manifestNumber}
                   disabled={!isEditable}
                   onChange={(e) => setManifestNumber(e.target.value)}
-                  placeholder="e.g. MNF-NAGA-2026-0902"
+                  placeholder="e.g. MNF-LEG-2026-0902"
                   className="w-full px-3 py-2 text-xs sm:text-sm font-mono font-bold rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-[#121212] text-neutral-900 dark:text-white focus:ring-2 focus:ring-[#80C7F2]"
                 />
               </div>
@@ -1070,7 +1070,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                 {Object.entries(groupedManifests).map(([mnfNumber, items]) => {
                   const manifestTotalExp = items.reduce((sum, i) => sum + i.expectedUnits, 0);
                   const manifestTotalRecv = items.reduce((sum, i) => sum + i.receivedUnits, 0);
-                  const source = items[0]?.supplierOrSource || 'Naga City Commissary Hub';
+                  const source = items[0]?.supplierOrSource || 'Legazpi Central Commissary Hub';
 
                   return (
                     <div

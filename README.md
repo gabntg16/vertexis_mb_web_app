@@ -1,6 +1,6 @@
 # VertexIS Management System
 
-VertexIS is The Marsh Bites’ internal web platform for the Naga City commissary and franchise branches. It combines branch requisitions, commissary production, dispatch and receiving, inventory controls, announcements, analytics, and a BIR-oriented point-of-sale workflow.
+VertexIS is The Marsh Bites’ internal web platform for the Legazpi City commissary and franchise branches. It combines branch requisitions, commissary production, dispatch and receiving, inventory controls, announcements, analytics, and a BIR-oriented point-of-sale workflow.
 
 ## Stack
 

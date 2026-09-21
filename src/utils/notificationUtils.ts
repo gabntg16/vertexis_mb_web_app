@@ -184,7 +184,7 @@ export function getLocationDisplay(ann: Announcement): {
 } {
   if (ann.scope === 'commissary') {
     return {
-      label: ann.targetBranchName || 'Naga Central Commissary Hub',
+      label: ann.targetBranchName || 'Legazpi Central Commissary Hub',
       isNationwide: false,
       isCommissary: true,
     };

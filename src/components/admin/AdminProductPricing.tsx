@@ -65,33 +65,19 @@ export const AdminProductPricing: React.FC = () => {
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-black text-neutral-900 dark:text-white tracking-tight">
-                Global SKU & Pricing Management
+                Pricing Management
               </h1>
               <p className="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400">
-                HQ Super Admin Authority • Centrally manage wholesale commissary rates and retail SRP across all 19+ branches
+                 Manage wholesale commissary rates and retail SRP across all 19+ branches.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>SUPER_ADMIN Authorized</span>
-          </span>
-        </div>
+        
       </div>
 
-      {/* RBAC Notice */}
-      <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 text-neutral-800 dark:text-neutral-200">
-        <div className="flex items-start space-x-3 text-xs sm:text-sm">
-          <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold text-neutral-900 dark:text-white">Strict RBAC Pricing Security:</span>{' '}
-            Branch Managers and Branch Staff are restricted from modifying unit selling prices or commissary wholesale costs. All price modifications apply network-wide to ensure BIR receipt accuracy and franchise contract consistency.
-          </div>
-        </div>
-      </div>
+      
 
       {feedback && (
         <div className={`p-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center space-x-2 ${

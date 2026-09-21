@@ -287,7 +287,7 @@ export const BranchAnnouncements: React.FC<BranchAnnouncementsProps> = ({ onNavi
                     </span>
 
                     <span>
-                      From: <strong className="text-neutral-700 dark:text-neutral-300">{ann.authorName || 'HQ Naga Central'}</strong>
+                      From: <strong className="text-neutral-700 dark:text-neutral-300">{ann.authorName || 'Legazpi Central HQ'}</strong>
                     </span>
                   </div>
 

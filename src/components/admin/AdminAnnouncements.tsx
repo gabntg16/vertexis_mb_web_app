@@ -6,19 +6,15 @@ import {
   Trash2,
   Calendar,
   Send,
-  Filter,
   Search,
   CheckCircle2,
   X,
   MapPin,
   Globe,
-  Users,
-  Building2,
   ShoppingBag,
   ChefHat,
   Truck,
   Boxes,
-  Receipt,
   Megaphone,
   CheckCheck,
   ChevronLeft,
@@ -31,7 +27,6 @@ import {
   NotificationAudience,
 } from '../../types';
 import {
-  NOTIFICATION_KINDS,
   NOTIFICATION_PRIORITIES,
   AUDIENCE_OPTIONS,
 } from '../../utils/notificationUtils';
@@ -41,7 +36,6 @@ export const AdminAnnouncements: React.FC = () => {
   const {
     announcements,
     branches,
-    currentUser,
     addAnnouncement,
     deleteAnnouncement,
     markAllAnnouncementsAsRead,
@@ -89,8 +83,11 @@ export const AdminAnnouncements: React.FC = () => {
     { key: 'logistics', label: 'Logistics & Dispatch', icon: <Truck className="w-4 h-4" /> },
     { key: 'production', label: 'Kitchen Production', icon: <ChefHat className="w-4 h-4" /> },
     { key: 'inventory', label: 'Inventory & Stock Alert', icon: <Boxes className="w-4 h-4" /> },
-    { key: 'pos', label: 'Retail POS & BIR', icon: <Receipt className="w-4 h-4" /> },
   ];
+
+  // The composer targets HQ and branch operations only. Existing cashier-targeted
+  // broadcasts remain supported in the data model and history filters.
+  const broadcastAudienceOptions = AUDIENCE_OPTIONS.filter((aud) => aud.key !== 'cashier');
 
   // Audience toggle handler
   const handleToggleAudience = (aud: NotificationAudience) => {
@@ -121,8 +118,8 @@ export const AdminAnnouncements: React.FC = () => {
     let targetBranchName: string | undefined = undefined;
 
     if (scopeType === 'commissary') {
-      targetBranchId = 'COMMISSARY-NAGA';
-      targetBranchName = 'Naga Central Commissary Hub';
+      targetBranchId = 'COMMISSARY-LEGAZPI';
+      targetBranchName = 'Legazpi Central Commissary Hub';
     } else if (scopeType === 'branch') {
       targetBranchId = selectedBranchId || branches[0]?.id || 'ALL';
       const b = branches.find((branch) => branch.id === targetBranchId);
@@ -210,12 +207,10 @@ export const AdminAnnouncements: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black tracking-tight flex items-center space-x-2">
-            <span>Targeted Notifications & Broadcast Center</span>
+            <span>Notifications & Broadcast Center</span>
           </h1>
           <p className="text-xs text-neutral-500 font-medium mt-1 max-w-2xl leading-relaxed">
-            Configure specific announcements with explicit classification: <strong>What Kind</strong> (Order,
-            Logistics, Kitchen, Stock, POS), <strong>Where</strong> (Nationwide, Commissary, or Specific
-            Branch), and <strong>Who can see</strong> (Role-based access).
+            Configure specific announcements with explicit classification.
           </p>
         </div>
 
@@ -238,7 +233,7 @@ export const AdminAnnouncements: React.FC = () => {
             className="px-4 py-2.5 rounded-xl bg-[#F37021] text-white text-xs sm:text-sm font-bold shadow-md hover:bg-[#d85e15] transition-all flex items-center space-x-1.5 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>New Targeted Broadcast</span>
+            <span>Create Broadcast</span>
           </button>
         </div>
       </div>
@@ -414,7 +409,7 @@ export const AdminAnnouncements: React.FC = () => {
             >
               <option value="all">All Locations</option>
               <option value="nationwide">🌐 Nationwide (All Branches)</option>
-              <option value="commissary">🏢 Naga Central Commissary</option>
+              <option value="commissary">🏢 Legazpi Central Commissary</option>
               <optgroup label="Specific Branch Stores">
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -557,21 +552,21 @@ export const AdminAnnouncements: React.FC = () => {
       {/* Broadcast Creation Modal with Explicit WHAT KIND, WHERE, and WHO Controls */}
       {/* ========================================================================= */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto">
           <div
-            className={`w-full max-w-xl rounded-3xl p-6 shadow-2xl border my-8 ${
+            className={`w-full max-w-xl max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-3xl p-4 sm:p-6 shadow-2xl border my-2 sm:my-8 ${
               isDark ? 'bg-[#1c1c1c] border-neutral-700 text-white' : 'bg-white border-neutral-200 text-neutral-900'
             }`}
           >
             {/* Modal Header */}
-            <div className="flex items-start justify-between border-b border-neutral-200 dark:border-neutral-800 pb-3 mb-4">
-              <div className="flex items-center space-x-2 text-[#F37021]">
+            <div className="flex items-start justify-between gap-3 border-b border-neutral-200 dark:border-neutral-800 pb-3 mb-4">
+              <div className="flex items-start min-w-0 gap-2 text-[#F37021]">
                 <Send className="w-5 h-5" />
-                <div>
+                <div className="min-w-0">
                   <h3 className="text-base font-bold text-neutral-900 dark:text-white leading-tight">
                     Publish Targeted Broadcast
                   </h3>
-                  <p className="text-[11px] text-neutral-400 mt-0.5">
+                  <p className="text-[11px] text-neutral-400 mt-0.5 leading-snug">
                     Define specific category, location scoping, and audience visibility
                   </p>
                 </div>
@@ -597,7 +592,7 @@ export const AdminAnnouncements: React.FC = () => {
                 </label>
 
                 {/* Category Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 min-[380px]:grid-cols-2 sm:grid-cols-3 gap-2">
                   {kindList.map((k) => {
                     const isSelected = kind === k.key;
                     return (
@@ -612,7 +607,7 @@ export const AdminAnnouncements: React.FC = () => {
                         }`}
                       >
                         <span className="shrink-0">{k.icon}</span>
-                        <span className="text-[11px] leading-snug">{k.label}</span>
+                        <span className="min-w-0 text-[11px] leading-snug break-words">{k.label}</span>
                       </button>
                     );
                   })}
@@ -656,7 +651,7 @@ export const AdminAnnouncements: React.FC = () => {
                   2. Where (Location & Branch Scope)
                 </label>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setScopeType('nationwide')}
@@ -667,25 +662,9 @@ export const AdminAnnouncements: React.FC = () => {
                     }`}
                   >
                     <Globe className="w-4 h-4 text-purple-500 shrink-0" />
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[11px] font-bold">Nationwide</p>
                       <p className="text-[9.5px] text-neutral-400">All 19 Branches</p>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setScopeType('commissary')}
-                    className={`p-2.5 rounded-xl border text-left flex items-center space-x-2 transition-all cursor-pointer ${
-                      scopeType === 'commissary'
-                        ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-500 text-amber-700 dark:text-amber-300 font-bold shadow-xs'
-                        : 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300'
-                    }`}
-                  >
-                    <Building2 className="w-4 h-4 text-amber-500 shrink-0" />
-                    <div>
-                      <p className="text-[11px] font-bold">Commissary Hub</p>
-                      <p className="text-[9.5px] text-neutral-400">Naga HQ Kitchen</p>
                     </div>
                   </button>
 
@@ -699,7 +678,7 @@ export const AdminAnnouncements: React.FC = () => {
                     }`}
                   >
                     <MapPin className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[11px] font-bold">Specific Branch</p>
                       <p className="text-[9.5px] text-neutral-400">Select store below</p>
                     </div>
@@ -735,15 +714,15 @@ export const AdminAnnouncements: React.FC = () => {
                   isDark ? 'bg-neutral-900/60 border-neutral-800' : 'bg-neutral-50/80 border-neutral-200'
                 }`}
               >
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <label className="block font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
                     3. Who Can See (Role-Based Audience)
                   </label>
-                  <span className="text-[10px] text-neutral-400">Select all that apply</span>
+                  <span className="text-[10px] text-neutral-400 sm:text-right">Select all that apply</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {AUDIENCE_OPTIONS.map((aud) => {
+                  {broadcastAudienceOptions.map((aud) => {
                     const isChecked = selectedAudiences.includes(aud.key);
                     return (
                       <button
@@ -762,9 +741,9 @@ export const AdminAnnouncements: React.FC = () => {
                           onChange={() => {}}
                           className="mt-0.5 rounded text-[#F37021] focus:ring-[#F37021]"
                         />
-                        <div>
+                        <div className="min-w-0">
                           <p className="text-[11px] font-bold leading-tight">{aud.label}</p>
-                          <p className="text-[9.5px] text-neutral-400 leading-snug">{aud.description}</p>
+                          <p className="text-[9.5px] text-neutral-400 leading-snug break-words">{aud.description}</p>
                         </div>
                       </button>
                     );
@@ -828,17 +807,17 @@ export const AdminAnnouncements: React.FC = () => {
               </div>
 
               {/* Modal Buttons */}
-              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-neutral-200 dark:border-neutral-800">
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-neutral-200 dark:border-neutral-800">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 font-semibold rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  className="w-full sm:w-auto px-4 py-2 font-semibold rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 font-bold rounded-xl bg-[#F37021] text-white hover:bg-[#d85e15] shadow-md transition-all cursor-pointer flex items-center space-x-1.5"
+                  className="w-full sm:w-auto justify-center px-5 py-2 font-bold rounded-xl bg-[#F37021] text-white hover:bg-[#d85e15] shadow-md transition-all cursor-pointer flex items-center space-x-1.5"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Publish Broadcast</span>

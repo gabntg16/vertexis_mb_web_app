@@ -734,7 +734,7 @@ export interface Announcement {
   // 2. WHERE (Scope & Location)
   scope?: 'nationwide' | 'branch' | 'commissary';
   targetBranchId?: string; // 'ALL' or specific branch ID
-  targetBranchName?: string; // Display branch name (e.g. "Legazpi City Branch", "Naga Commissary Hub")
+  targetBranchName?: string; // Display branch name (e.g. "Legazpi City Branch", "Legazpi Central Commissary Hub")
 
   // 3. WHO CAN SEE (Target Audience & RBAC)
   targetAudience?: NotificationAudience[];

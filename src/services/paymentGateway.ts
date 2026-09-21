@@ -41,13 +41,13 @@ export const COMMISSARY_BANK_ACCOUNTS = [
 
 export const COMMISSARY_DIGITAL_WALLETS = {
   gcash: {
-    merchantName: 'The Marsh Bites Naga Commissary',
+    merchantName: 'The Marsh Bites Legazpi Central Commissary',
     walletNumber: '0951-621-5848',
     merchantId: 'MID-MB-GCASH-49102',
     channelName: 'GCash',
   },
   maya: {
-    merchantName: 'The Marsh Bites Naga Commissary',
+    merchantName: 'The Marsh Bites Legazpi Central Commissary',
     walletNumber: '0917-884-2104',
     merchantId: 'MID-MB-MAYA-99281',
     channelName: 'Maya',

@@ -36,7 +36,7 @@ export function generateInitialSpoilageRecords(
       qty: 1,
       reason: 'Transport Damage',
       daysAgo: 6,
-      notes: 'Outer packaging seal punctured during transit from Naga Commissary.',
+      notes: 'Outer packaging seal punctured during transit from Legazpi Commissary.',
     },
     {
       branchId: 'b-cabuyao',

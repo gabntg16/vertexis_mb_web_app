@@ -47,7 +47,7 @@ export const AdminOrders: React.FC = () => {
     themeMode,
   } = useData();
 
-  const [activeMainSubTab, setActiveMainSubTab] = useState<'requisitions' | 'payments'>('requisitions');
+  const [activeMainSubTab, setActiveMainSubTab] = useState<'requisitions' | 'payments'>('payments');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'branch_asc' | 'amount_desc' | 'amount_asc' | 'status'>('date_desc');
@@ -224,8 +224,8 @@ export const AdminOrders: React.FC = () => {
         createdAt: new Date().toISOString(),
         sender: {
           companyName: 'The Marsh Bites Enterprise (Central Commissary)',
-          hubName: 'Naga Central Commissary Hub',
-          address: 'Zone 4, Concepcion Pequeña, Naga City, Camarines Sur',
+          hubName: 'Legazpi Central Commissary Hub',
+          address: 'Legazpi City, Albay',
           contactPerson: 'Commissary Logistics Officer',
           phone: '+63 917 555 6274',
         },
@@ -280,7 +280,7 @@ export const AdminOrders: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveMainSubTab('requisitions')}
-          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
+          className={`order-2 px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
             activeMainSubTab === 'requisitions'
               ? 'bg-[#F37021] text-white shadow-xs'
               : isDark
@@ -295,7 +295,7 @@ export const AdminOrders: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveMainSubTab('payments')}
-          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
+          className={`order-1 px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
             activeMainSubTab === 'payments'
               ? 'bg-[#F37021] text-white shadow-xs'
               : isDark
