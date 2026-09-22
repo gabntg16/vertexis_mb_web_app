@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Flame,
   ArrowRightLeft,
   ChefHat,
   AlertTriangle,
+  AlertCircle,
   CheckCircle2,
   X,
   Package,
@@ -26,6 +27,11 @@ export interface ProductionSafeguardDetails {
   isOpen: boolean;
   type: ProductionSafeguardType;
   title?: string;
+  confirmQuestion?: string;
+  warningNotice?: string;
+  confirmText?: string;
+  cancelText?: string;
+  isInfoOnly?: boolean;
   flavor?: string;
   quantity?: number;
   chefName?: string;
@@ -37,7 +43,7 @@ export interface ProductionSafeguardDetails {
   currentBufferStock?: number;
   remainingBufferStock?: number;
   notes?: string;
-  onConfirm: () => void | Promise<void>;
+  onConfirm?: () => void | Promise<void>;
 }
 
 export interface ProductionSafeguardModalProps {
@@ -52,6 +58,11 @@ export const ProductionSafeguardModal: React.FC<ProductionSafeguardModalProps> =
   onClose,
 }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActionError(null);
+  }, [details]);
 
   if (!details || !details.isOpen) return null;
 
@@ -59,6 +70,11 @@ export const ProductionSafeguardModal: React.FC<ProductionSafeguardModalProps> =
   const {
     type,
     title,
+    confirmQuestion,
+    warningNotice,
+    confirmText,
+    cancelText,
+    isInfoOnly,
     flavor,
     quantity,
     chefName,
@@ -76,11 +92,15 @@ export const ProductionSafeguardModal: React.FC<ProductionSafeguardModalProps> =
   const handleConfirm = async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
+    setActionError(null);
     try {
-      await onConfirm();
+      if (onConfirm) {
+        await onConfirm();
+      }
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Safeguard confirmation failed:', err);
+      setActionError(err?.message || 'Safeguard confirmation failed. Please check the action prerequisites.');
     } finally {
       setIsSubmitting(false);
     }
@@ -95,7 +115,7 @@ export const ProductionSafeguardModal: React.FC<ProductionSafeguardModalProps> =
       case 'send_to_kitchen':
         return <ChefHat className="w-6 h-6 text-amber-500" />;
       case 'advance_stage':
-        return <CheckCircle2 className="w-6 h-6 text-purple-500" />;
+        return <AlertTriangle className="w-6 h-6 text-amber-500" />;
       case 'delete_product':
         return <Trash2 className="w-6 h-6 text-red-500" />;
       default:
@@ -112,7 +132,7 @@ export const ProductionSafeguardModal: React.FC<ProductionSafeguardModalProps> =
       case 'send_to_kitchen':
         return { label: 'MTO Production Pipeline', bg: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30' };
       case 'advance_stage':
-        return { label: 'Batch Stage Transition', bg: 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30' };
+        return { label: 'Action Confirmation Alert', bg: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30' };
       case 'delete_product':
         return { label: 'Catalog Removal Warning', bg: 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30' };
       default:
@@ -183,6 +203,27 @@ export const ProductionSafeguardModal: React.FC<ProductionSafeguardModalProps> =
             </h3>
           </div>
         </div>
+
+        {/* Action Confirmation Alert Prompt */}
+        {(confirmQuestion || warningNotice || type === 'advance_stage') && (
+          <div className="rounded-2xl border border-amber-300 dark:border-amber-700/70 bg-amber-500/10 dark:bg-amber-950/30 p-3.5 mb-4 flex items-start gap-3">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="text-xs space-y-1">
+              <p className="font-extrabold text-amber-900 dark:text-amber-200 text-sm">
+                Are you sure about this action?
+              </p>
+              <p className="text-amber-800/90 dark:text-amber-300/90 leading-relaxed font-medium">
+                {confirmQuestion || 'Please verify that you intend to proceed with this workflow transition. Changes will be recorded in the live commissary tracking system.'}
+              </p>
+              {warningNotice && (
+                <div className="mt-2 text-rose-700 dark:text-rose-300 font-semibold bg-rose-500/10 dark:bg-rose-950/40 p-2.5 rounded-xl border border-rose-300 dark:border-rose-800 flex items-start gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                  <span>{warningNotice}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Operation Summary Box */}
         <div
@@ -306,53 +347,79 @@ export const ProductionSafeguardModal: React.FC<ProductionSafeguardModalProps> =
           </div>
         </div>
 
+        {/* Error Alert if action failed */}
+        {actionError && (
+          <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs flex items-start space-x-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">Action Failed</p>
+              <p className="mt-0.5 text-[11px] opacity-90">{actionError}</p>
+            </div>
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2">
-          <button
-            type="button"
-            disabled={isSubmitting}
-            onClick={onClose}
-            className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 font-semibold text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer text-center disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={isSubmitting}
-            onClick={handleConfirm}
-            className={`w-full sm:w-auto px-5 py-2.5 rounded-xl text-white font-bold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center space-x-1.5 disabled:opacity-60 disabled:cursor-not-allowed ${
-              type === 'delete_product'
-                ? 'bg-red-600 hover:bg-red-700'
-                : type === 'allocate_stock'
-                ? 'bg-[#0369a1] dark:bg-[#80C7F2] dark:text-neutral-950 hover:opacity-90'
-                : 'bg-[#F37021] hover:bg-[#d85e15]'
-            }`}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Processing Action...</span>
-              </>
-            ) : (
-              <>
-                {type === 'cook_batch' && <Flame className="w-3.5 h-3.5" />}
-                {type === 'allocate_stock' && <ArrowRightLeft className="w-3.5 h-3.5" />}
-                {type === 'send_to_kitchen' && <ChefHat className="w-3.5 h-3.5" />}
-                {type === 'delete_product' && <Trash2 className="w-3.5 h-3.5" />}
-                <span>
-                  {type === 'cook_batch'
-                    ? 'Yes, Start Kettle Cook'
+          {isInfoOnly ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 font-bold text-xs shadow-md transition-all cursor-pointer text-center hover:opacity-90"
+            >
+              Understood / Close
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={onClose}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 font-semibold text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer text-center disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {cancelText || 'Cancel'}
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleConfirm}
+                className={`w-full sm:w-auto px-5 py-2.5 rounded-xl text-white font-bold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center space-x-1.5 disabled:opacity-60 disabled:cursor-not-allowed ${
+                  type === 'delete_product'
+                    ? 'bg-red-600 hover:bg-red-700'
                     : type === 'allocate_stock'
-                    ? 'Yes, Confirm Stock Transfer'
-                    : type === 'send_to_kitchen'
-                    ? 'Yes, Send to Kitchen'
-                    : type === 'delete_product'
-                    ? 'Yes, Delete Flavor'
-                    : 'Yes, Confirm Action'}
-                </span>
-              </>
-            )}
-          </button>
+                    ? 'bg-[#0369a1] dark:bg-[#80C7F2] dark:text-neutral-950 hover:opacity-90'
+                    : 'bg-[#F37021] hover:bg-[#d85e15]'
+                }`}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Processing Action...</span>
+                  </>
+                ) : (
+                  <>
+                    {type === 'cook_batch' && <Flame className="w-3.5 h-3.5" />}
+                    {type === 'allocate_stock' && <ArrowRightLeft className="w-3.5 h-3.5" />}
+                    {type === 'send_to_kitchen' && <ChefHat className="w-3.5 h-3.5" />}
+                    {type === 'delete_product' && <Trash2 className="w-3.5 h-3.5" />}
+                    <span>
+                      {confirmText ||
+                        (type === 'cook_batch'
+                          ? 'Yes, Start Kettle Cook'
+                          : type === 'allocate_stock'
+                          ? 'Yes, Confirm Stock Transfer'
+                          : type === 'send_to_kitchen'
+                          ? 'Yes, Send to Kitchen'
+                          : type === 'delete_product'
+                          ? 'Yes, Delete Flavor'
+                          : type === 'advance_stage'
+                          ? "Yes, I'm sure — Move to Next Stage"
+                          : 'Yes, Confirm Action')}
+                    </span>
+                  </>
+                )}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

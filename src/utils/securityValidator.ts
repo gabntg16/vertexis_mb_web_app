@@ -251,7 +251,7 @@ const VALID_MTO_STAGE_TRANSITIONS: Record<ProductionStage, ProductionStage[]> = 
   in_kettle: ['curing', 'packaging', 'packaged'], // packaged keeps legacy records forward-compatible
   in_production: ['curing', 'packaging'],
   curing: ['packaging', 'packaged'], // packaged keeps legacy records forward-compatible
-  packaging: ['packaged'],
+  packaging: ['packaged', 'ready_for_dispatch'],
   packaged: ['ready_for_dispatch'],
   ready_for_dispatch: [], // Terminal stage
 };

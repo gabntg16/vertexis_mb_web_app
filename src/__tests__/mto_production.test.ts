@@ -18,14 +18,21 @@ describe('Made-to-Order (MTO) Confectionery & Batch Lifecycle Test Suite', () =>
     // Curing Slabs -> Packaged
     expect(validateMTOStageTransition('curing', 'packaged').valid).toBe(true);
 
+    // Packaging -> Ready for Dispatch
+    expect(validateMTOStageTransition('packaging', 'ready_for_dispatch').valid).toBe(true);
+
     // Packaged -> Ready for Dispatch
     expect(validateMTOStageTransition('packaged', 'ready_for_dispatch').valid).toBe(true);
   });
 
-  it('rejects backwards invalid transitions (e.g. ready_for_dispatch back to queued)', () => {
-    const result = validateMTOStageTransition('ready_for_dispatch', 'queued');
-    expect(result.valid).toBe(false);
-    expect(result.error).toContain('Illegal Stage Transition');
+  it('rejects backwards invalid transitions (e.g. ready_for_dispatch or in_kettle back to queued)', () => {
+    const result1 = validateMTOStageTransition('ready_for_dispatch', 'queued');
+    expect(result1.valid).toBe(false);
+    expect(result1.error).toContain('Illegal Stage Transition');
+
+    const result2 = validateMTOStageTransition('in_kettle', 'queued');
+    expect(result2.valid).toBe(false);
+    expect(result2.error).toContain('Illegal Stage Transition: Cannot transition MTO order from \'in_kettle\' to \'queued\'.');
   });
 
   it('enforces MTO batch code format standard (e.g. MTO-LEG-0818)', () => {

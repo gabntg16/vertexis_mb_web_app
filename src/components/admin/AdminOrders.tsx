@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   CreditCard,
   Package,
+  X,
 } from 'lucide-react';
 import {
   DispatchManifestData,
@@ -900,63 +901,93 @@ export const AdminOrders: React.FC = () => {
 
       {/* Approve Confirmation Modal */}
       {showApproveConfirmModal && selectedOrder && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
-          <div className={`w-full max-w-md rounded-3xl p-6 shadow-2xl border animate-in zoom-in-95 duration-150 ${
-            isDark ? 'bg-[#1c1c1c] border-neutral-700 text-white' : 'bg-white border-neutral-200 text-neutral-900'
-          }`}>
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold">Confirm Order Approval</h3>
-                <p className="text-xs text-neutral-500">Review and verify stock release</p>
-              </div>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <p className="text-neutral-600 dark:text-neutral-300">
-                Are you sure you really want to approve <strong>Order #{selectedOrder.id}</strong> for <strong>{selectedOrder.branchName}</strong>?
-              </p>
-
-              <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-neutral-500">Requisition Value:</span>
-                  <span className="font-bold text-emerald-600 dark:text-emerald-400">₱{selectedOrder.totalAmount.toLocaleString()}</span>
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowApproveConfirmModal(false);
+          }}
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
+        >
+          <div
+            className={`relative w-full max-w-md max-h-[88vh] flex flex-col rounded-3xl shadow-2xl border overflow-hidden my-auto animate-in zoom-in-95 duration-150 ${
+              isDark ? 'bg-[#1c1c1c] border-neutral-700 text-white' : 'bg-white border-neutral-200 text-neutral-900'
+            }`}
+          >
+            <div className="shrink-0 px-5 py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between bg-white dark:bg-[#1c1c1c]">
+              <div className="flex items-center space-x-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                  <CheckCircle2 className="w-5 h-5" />
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-neutral-500">Total Quantity:</span>
-                  <span className="font-semibold">{selectedOrder.items.reduce((s, i) => s + i.quantity, 0)} units ({selectedOrder.items.length} flavor types)</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-neutral-500">Payment Proof:</span>
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center space-x-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Verified Attached</span>
-                  </span>
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold truncate">Confirm Order Approval</h3>
+                  <p className="text-xs text-neutral-500 truncate">Review and verify stock release</p>
                 </div>
               </div>
 
-              <p className="text-[11px] text-neutral-500">
-                Approving this order will allocate commissary stock to {selectedOrder.branchName} and enable delivery dispatch creation.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end space-x-2.5 mt-6 pt-3 border-t border-neutral-100 dark:border-neutral-800">
               <button
                 type="button"
                 onClick={() => setShowApproveConfirmModal(false)}
-                className="px-4 py-2 text-xs font-semibold rounded-xl border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                className="p-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer flex items-center justify-center shrink-0 ml-3"
+                aria-label="Exit modal"
+                title="Exit / Close"
               >
-                Cancel
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3.5">
+              {/* Alert Banner: Prompt asking if sure with decision */}
+              <div className="p-3.5 rounded-2xl border border-amber-300 dark:border-amber-700/60 bg-amber-500/10 dark:bg-amber-950/30 flex items-start space-x-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-0.5">
+                  <p className="font-extrabold text-amber-900 dark:text-amber-200">
+                    Are you sure with your decision?
+                  </p>
+                  <p className="text-amber-800/90 dark:text-amber-300/90 font-medium leading-relaxed">
+                    Approving <strong>Order #{selectedOrder.id}</strong> for <strong>{selectedOrder.branchName}</strong> will officially clear commissary allocation and enable dispatch scheduling.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-neutral-500">Requisition Value:</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">₱{selectedOrder.totalAmount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-neutral-500">Total Quantity:</span>
+                    <span className="font-semibold">{selectedOrder.items.reduce((s, i) => s + i.quantity, 0)} units ({selectedOrder.items.length} flavor types)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-neutral-500">Payment Proof:</span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center space-x-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Verified Attached</span>
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-neutral-500">
+                  Approving this order will allocate commissary stock to {selectedOrder.branchName} and enable delivery dispatch creation.
+                </p>
+              </div>
+            </div>
+
+            <div className="shrink-0 px-5 py-3.5 border-t border-neutral-200 dark:border-neutral-800 flex flex-wrap items-center justify-end gap-2 bg-white dark:bg-[#1c1c1c]">
+              <button
+                type="button"
+                onClick={() => setShowApproveConfirmModal(false)}
+                className="px-4 py-2 text-xs font-semibold rounded-xl border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
+                Cancel / Exit
               </button>
               <button
                 type="button"
                 onClick={handleConfirmApprove}
-                className="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors flex items-center space-x-1.5"
+                className="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors flex items-center space-x-1.5 cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Yes, Approve Order</span>
+                <span>Yes, I'm Sure — Approve Order</span>
               </button>
             </div>
           </div>

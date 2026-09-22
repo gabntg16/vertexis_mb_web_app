@@ -1,9 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import {
   Menu,
   ShieldCheck,
-  Store,
   MapPin,
   Sun,
   Moon,
@@ -75,14 +74,28 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const isAdmin = isSuperAdmin(currentUser);
   const isDark = themeMode === 'dark';
   const isSettingsActive = ['account_settings', 'privacy_settings', 'legal_terms'].includes(activeTab);
-  const currentRoleLabel = isSuperAdmin(currentUser)
-    ? 'HQ Super Admin'
+
+  const defaultTab = isAdmin
+    ? 'network_analytics'
     : isBranchManager(currentUser)
-    ? 'Branch Manager'
-    : 'Branch Staff';
-  const currentScope = isSuperAdmin(currentUser)
-    ? 'Legazpi HQ'
-    : currentBranch?.name?.replace('Marsh Bites - ', '') || 'Branch Station';
+    ? 'branch_analytics'
+    : 'staff_dashboard';
+
+  const previousTabRef = useRef<string>(defaultTab);
+
+  useEffect(() => {
+    if (!['account_settings', 'privacy_settings', 'legal_terms'].includes(activeTab)) {
+      previousTabRef.current = activeTab;
+    }
+  }, [activeTab]);
+
+  const handleToggleSettings = () => {
+    if (isSettingsActive) {
+      onNavigateTab?.(previousTabRef.current || defaultTab);
+    } else {
+      onNavigateTab?.('account_settings');
+    }
+  };
 
   // Filter notifications specifically targeted to this user (WHO) and branch (WHERE)
   const userNotifications = useMemo(() => {
@@ -348,34 +361,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               )}
             </button>
 
-            {/* Current signed-in user */}
-            <div className="relative">
-              <div
-                id="top-current-user"
-                className={`mallow-header-control flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all shadow-xs ${
-                  isSuperAdmin(currentUser)
-                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20'
-                    : isBranchManager(currentUser)
-                    ? 'bg-[#80C7F2]/10 border-[#80C7F2]/30 text-[#1a7bb5] dark:text-[#80C7F2] hover:bg-[#80C7F2]/20'
-                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20'
-                }`}
-                title={`${currentUser.name} - ${currentRoleLabel} - ${currentScope}`}
-              >
-                {isSuperAdmin(currentUser) ? (
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                ) : isBranchManager(currentUser) ? (
-                  <Store className="w-3.5 h-3.5 text-[#80C7F2] shrink-0" />
-                ) : (
-                  <ClipboardCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                )}
-                <span className="hidden sm:flex flex-col min-w-0 text-left leading-tight">
-                  <span className="truncate max-w-[150px]">{currentUser.name}</span>
-                  <span className="text-[9px] opacity-70 truncate max-w-[150px]">{currentRoleLabel} - {currentScope}</span>
-                </span>
-              </div>
-
-            </div>
-
             {/* Notifications Popover */}
             <div className="relative">
               <button
@@ -620,14 +605,14 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <button
               id="top-settings-btn"
               type="button"
-              onClick={() => onNavigateTab?.('account_settings')}
+              onClick={handleToggleSettings}
               className={`mallow-header-control p-2 rounded-xl border transition-colors ${
                 isSettingsActive
                   ? 'bg-[#80C7F2]/20 border-[#80C7F2]/40 text-[#1a7bb5] dark:text-[#80C7F2]'
                   : 'bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'
               }`}
-              title="Account and workspace settings"
-              aria-label="Open account and workspace settings"
+              title={isSettingsActive ? 'Return to previous screen' : 'Account and workspace settings'}
+              aria-label={isSettingsActive ? 'Return to previous screen' : 'Open account and workspace settings'}
             >
               <Settings className="w-3.5 h-3.5" />
             </button>

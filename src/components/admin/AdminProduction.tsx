@@ -22,6 +22,7 @@ import {
   TrendingUp,
   ShoppingBag,
   Filter,
+  X,
 } from 'lucide-react';
 import {
   ProductionSafeguardModal,
@@ -91,6 +92,7 @@ export const AdminProduction: React.FC = () => {
     updateBatchStage,
     updateOrderProductionStage,
     produceForOrder,
+    approveOrder,
     addProductionStock,
     addProduct,
     updateProduct,
@@ -249,7 +251,7 @@ export const AdminProduction: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-black tracking-tight text-neutral-900 dark:text-white">
             Central Commissary & Production Batches
@@ -260,7 +262,7 @@ export const AdminProduction: React.FC = () => {
         </div>
 
         {/* Responsive Action Buttons with Safeguard Confirmations */}
-        <div className="flex flex-col xs:flex-row sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto shrink-0">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto shrink-0">
           <button
             type="button"
             onClick={() => setShowLogModal(true)}
@@ -283,102 +285,126 @@ export const AdminProduction: React.FC = () => {
         </div>
       </div>
 
-      {/* Made-to-Order Top Performance Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className={`p-4 sm:p-5 rounded-3xl border transition-all ${
+      {/* Made-to-Order Top Performance Metrics - Responsive 2x2 grid on mobile/tablet to 4-col on desktop */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        <div className={`p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border transition-all flex flex-col justify-between ${
           isDark ? 'bg-[#161616] border-neutral-800' : 'bg-white border-orange-500/20 shadow-xs'
         }`}>
-          <div className="flex items-center justify-between text-neutral-400 mb-1">
-            <span className="text-xs font-bold uppercase tracking-wider">Branch Demand</span>
-            <ShoppingBag className="w-4 h-4 text-[#F37021]" />
+          <div>
+            <div className="flex items-center justify-between text-neutral-400 mb-1">
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">Branch Demand</span>
+              <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#F37021] shrink-0 ml-1" />
+            </div>
+            <p className="text-xl sm:text-2xl font-black text-[#F37021] tracking-tight">
+              {totalRequisitionUnits} <span className="text-[11px] sm:text-xs font-medium text-neutral-400">units</span>
+            </p>
           </div>
-          <p className="text-2xl font-black text-[#F37021]">{totalRequisitionUnits} <span className="text-xs font-medium text-neutral-400">units</span></p>
-          <p className="text-[11px] text-neutral-500 mt-1"> </p>
+          <p className="text-[10px] sm:text-[11px] text-neutral-500 mt-1.5 truncate">
+            {activeMTOOrders.length} active requisitions
+          </p>
         </div>
 
-        <div className={`p-4 sm:p-5 rounded-3xl border transition-all ${
+        <div className={`p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border transition-all flex flex-col justify-between ${
           isDark ? 'bg-[#161616] border-neutral-800' : 'bg-white border-amber-500/20 shadow-xs'
         }`}>
-          <div className="flex items-center justify-between text-neutral-400 mb-1">
-            <span className="text-xs font-bold uppercase tracking-wider">Live In-Kettle</span>
-            <Flame className="w-4 h-4 text-amber-500" />
+          <div>
+            <div className="flex items-center justify-between text-neutral-400 mb-1">
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">Live In-Kettle</span>
+              <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500 shrink-0 ml-1" />
+            </div>
+            <p className="text-xl sm:text-2xl font-black text-amber-500 tracking-tight">
+              {totalInProductionUnits} <span className="text-[11px] sm:text-xs font-medium text-neutral-400">units</span>
+            </p>
           </div>
-          <p className="text-2xl font-black text-amber-500">{totalInProductionUnits} <span className="text-xs font-medium text-neutral-400">units</span></p>
-          <p className="text-[11px] text-neutral-500 mt-1">{activeBatchesCount} live cooking batches active</p>
+          <p className="text-[10px] sm:text-[11px] text-neutral-500 mt-1.5 truncate">
+            {activeBatchesCount} live cooking batches active
+          </p>
         </div>
 
-        <div className={`p-4 sm:p-5 rounded-3xl border transition-all ${
+        <div className={`p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border transition-all flex flex-col justify-between ${
           isDark ? 'bg-[#161616] border-neutral-800' : 'bg-white border-sky-500/20 shadow-xs'
         }`}>
-          <div className="flex items-center justify-between text-neutral-400 mb-1">
-            <span className="text-xs font-bold uppercase tracking-wider">Commissary Buffer</span>
-            <Package className="w-4 h-4 text-[#80C7F2]" />
+          <div>
+            <div className="flex items-center justify-between text-neutral-400 mb-1">
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">Commissary Buffer</span>
+              <Package className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#80C7F2] shrink-0 ml-1" />
+            </div>
+            <p className="text-xl sm:text-2xl font-black text-[#80C7F2] tracking-tight">
+              {totalBufferUnits} <span className="text-[11px] sm:text-xs font-medium text-neutral-400">units</span>
+            </p>
           </div>
-          <p className="text-2xl font-black text-[#80C7F2]">{totalBufferUnits} <span className="text-xs font-medium text-neutral-400">units</span></p>
-          <p className="text-[11px] text-neutral-500 mt-1"> </p>
+          <p className="text-[10px] sm:text-[11px] text-neutral-500 mt-1.5 truncate">
+            {products.length} master flavor recipes
+          </p>
         </div>
 
-        <div className={`p-4 sm:p-5 rounded-3xl border transition-all ${
+        <div className={`p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border transition-all flex flex-col justify-between ${
           isDark ? 'bg-[#161616] border-neutral-800' : 'bg-white border-emerald-500/20 shadow-xs'
         }`}>
-          <div className="flex items-center justify-between text-neutral-400 mb-1">
-            <span className="text-xs font-bold uppercase tracking-wider">MTO Efficiency</span>
-            <ChefHat className="w-4 h-4 text-emerald-500" />
+          <div>
+            <div className="flex items-center justify-between text-neutral-400 mb-1">
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">MTO Efficiency</span>
+              <ChefHat className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500 shrink-0 ml-1" />
+            </div>
+            <p className="text-xl sm:text-2xl font-black text-emerald-500 tracking-tight">100%</p>
           </div>
-          <p className="text-2xl font-black text-emerald-500">100%</p>
-          <p className="text-[11px] text-neutral-500 mt-1">Zero stale stock • Freshly whipped</p>
+          <p className="text-[10px] sm:text-[11px] text-neutral-500 mt-1.5 truncate">
+            Zero stale stock • Freshly whipped
+          </p>
         </div>
       </div>
 
       {/* Production Navigation Subtabs (Responsive Scrollable with smooth snapping) */}
-      <div className="flex items-center space-x-2 border-b border-neutral-200 dark:border-neutral-800 pb-3 overflow-x-auto no-scrollbar">
-        <button
-          onClick={() => setActiveSubTab('pipeline')}
-          className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center space-x-2 shrink-0 whitespace-nowrap transition-all cursor-pointer ${
-            activeSubTab === 'pipeline'
-              ? 'bg-[#F37021] text-white shadow-xs'
-              : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
-          }`}
-        >
-          <Building2 className="w-4 h-4 shrink-0" />
-          <span>Branch Requisitions ({activeMTOOrders.length})</span>
-        </button>
+      <div className="border-b border-neutral-200 dark:border-neutral-800 pb-2.5 sm:pb-3">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth py-0.5 -mx-1 px-1 sm:mx-0 sm:px-0">
+          <button
+            onClick={() => setActiveSubTab('pipeline')}
+            className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center space-x-1.5 sm:space-x-2 shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+              activeSubTab === 'pipeline'
+                ? 'bg-[#F37021] text-white shadow-xs'
+                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+            }`}
+          >
+            <Building2 className="w-4 h-4 shrink-0" />
+            <span>Branch Requisitions ({activeMTOOrders.length})</span>
+          </button>
 
-        <button
-          onClick={() => setActiveSubTab('batches')}
-          className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center space-x-2 shrink-0 whitespace-nowrap transition-all cursor-pointer ${
-            activeSubTab === 'batches'
-              ? 'bg-[#F37021] text-white shadow-xs'
-              : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
-          }`}
-        >
-          <Flame className="w-4 h-4 shrink-0" />
-          <span>Live Kitchen Batches ({productionBatches.length})</span>
-        </button>
+          <button
+            onClick={() => setActiveSubTab('batches')}
+            className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center space-x-1.5 sm:space-x-2 shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+              activeSubTab === 'batches'
+                ? 'bg-[#F37021] text-white shadow-xs'
+                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+            }`}
+          >
+            <Flame className="w-4 h-4 shrink-0" />
+            <span>Live Kitchen Batches ({productionBatches.length})</span>
+          </button>
 
-        <button
-          onClick={() => setActiveSubTab('demand')}
-          className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center space-x-2 shrink-0 whitespace-nowrap transition-all cursor-pointer ${
-            activeSubTab === 'demand'
-              ? 'bg-[#F37021] text-white shadow-xs'
-              : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
-          }`}
-        >
-          <TrendingUp className="w-4 h-4 shrink-0" />
-          <span>Flavor Demand Matrix</span>
-        </button>
+          <button
+            onClick={() => setActiveSubTab('demand')}
+            className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center space-x-1.5 sm:space-x-2 shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+              activeSubTab === 'demand'
+                ? 'bg-[#F37021] text-white shadow-xs'
+                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4 shrink-0" />
+            <span>Flavor Demand Matrix</span>
+          </button>
 
-        <button
-          onClick={() => setActiveSubTab('catalog')}
-          className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center space-x-2 shrink-0 whitespace-nowrap transition-all cursor-pointer ${
-            activeSubTab === 'catalog'
-              ? 'bg-[#F37021] text-white shadow-xs'
-              : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
-          }`}
-        >
-          <Package className="w-4 h-4 shrink-0" />
-          <span>Commissary Catalog & Buffer</span>
-        </button>
+          <button
+            onClick={() => setActiveSubTab('catalog')}
+            className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center space-x-1.5 sm:space-x-2 shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+              activeSubTab === 'catalog'
+                ? 'bg-[#F37021] text-white shadow-xs'
+                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+            }`}
+          >
+            <Package className="w-4 h-4 shrink-0" />
+            <span>Commissary Catalog & Buffer</span>
+          </button>
+        </div>
       </div>
 
       {/* SUBTAB 1: Branch Requisitions Pipeline */}
@@ -467,92 +493,254 @@ export const AdminProduction: React.FC = () => {
                       {/* Stage Progression Controls */}
                       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
                         <div className="flex flex-wrap items-center gap-1 bg-neutral-100 dark:bg-neutral-800/80 p-1.5 rounded-2xl border border-neutral-200 dark:border-neutral-700">
+                          {/* 1. Queued */}
                           <button
                             type="button"
-                            onClick={() => updateOrderProductionStage(ord.id, 'queued')}
-                            className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
-                              stage === 'queued'
-                                ? 'bg-white dark:bg-neutral-900 shadow-xs text-neutral-900 dark:text-white'
-                                : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
-                            }`}
-                          >
-                            1. Queued
-                          </button>
-                          <button
-                            type="button"
-                            disabled={!isBatchingEligible}
                             onClick={() => {
+                              if (stage === 'queued') {
+                                setSafeguardDetails({
+                                  isOpen: true,
+                                  type: 'advance_stage',
+                                  title: `Order #${ord.id} is Currently Queued`,
+                                  confirmQuestion: `This requisition is currently waiting in the initial Queued stage of the commissary production pipeline.`,
+                                  branchName: ord.branchName,
+                                  orderId: ord.id,
+                                  fromStage: 'Queued',
+                                  toStage: 'Queued',
+                                  isInfoOnly: true,
+                                });
+                                return;
+                              }
                               setSafeguardDetails({
                                 isOpen: true,
                                 type: 'advance_stage',
-                                title: `Move Order #${ord.id} to Boiling & Curing?`,
+                                title: `Cannot Revert to Queued Stage`,
+                                confirmQuestion: `Order #${ord.id} has already progressed to the '${stage}' stage. Production stages move forward sequentially for food safety and traceability.`,
+                                branchName: ord.branchName,
+                                orderId: ord.id,
+                                fromStage: stage,
+                                toStage: 'Queued',
+                                isInfoOnly: true,
+                              });
+                            }}
+                            className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
+                              stage === 'queued'
+                                ? 'bg-white dark:bg-neutral-900 shadow-xs text-neutral-900 dark:text-white'
+                                : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
+                            }`}
+                            title={stage === 'queued' ? 'Order is currently queued' : 'Order has already passed the Queued stage'}
+                          >
+                            1. Queued
+                          </button>
+
+                          {/* 2. Kettle & Cure */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (stage === 'in_kettle' || stage === 'curing') {
+                                setSafeguardDetails({
+                                  isOpen: true,
+                                  type: 'advance_stage',
+                                  title: `Order #${ord.id} is in Kettle, Whip & Curing`,
+                                  confirmQuestion: `This requisition is actively boiling, whipping, or curing in the confectionery kitchen.`,
+                                  branchName: ord.branchName,
+                                  orderId: ord.id,
+                                  fromStage: 'Kettle & Cure',
+                                  toStage: 'Kettle & Cure',
+                                  isInfoOnly: true,
+                                });
+                                return;
+                              }
+                              if (stage === 'packaged' || stage === 'packaging' || stage === 'ready_for_dispatch' || (stage as string) === 'ready') {
+                                setSafeguardDetails({
+                                  isOpen: true,
+                                  type: 'advance_stage',
+                                  title: `Order #${ord.id} Completed Kettle & Cure`,
+                                  confirmQuestion: `This order has finished boiling and curing, and is currently in '${stage}'. Production pipeline stages cannot be regressed.`,
+                                  branchName: ord.branchName,
+                                  orderId: ord.id,
+                                  fromStage: stage,
+                                  toStage: 'Kettle & Cure',
+                                  isInfoOnly: true,
+                                });
+                                return;
+                              }
+
+                              // Order is in 'queued' stage: Prompt confirmation alert
+                              setSafeguardDetails({
+                                isOpen: true,
+                                type: 'advance_stage',
+                                title: `Move Order #${ord.id} to Kettle, Whip & Curing?`,
+                                confirmQuestion: `Are you sure about this action? Advancing Order #${ord.id} (${ord.branchName}) will allocate kitchen ingredients, assign curing slabs, and move this requisition into live confectioner cooking.`,
+                                warningNotice: !isBatchingEligible
+                                  ? `Notice: This requisition is currently ${!isApproved ? 'under review / pending approval' : 'awaiting payment verification'}. Proceeding will mark the order as authorized for live kitchen production.`
+                                  : undefined,
+                                confirmText: "Yes, I'm sure — Move to Kettle & Cure",
                                 branchName: ord.branchName,
                                 orderId: ord.id,
                                 fromStage: 'Queued',
                                 toStage: 'Kettle, Whip & Curing',
-                                onConfirm: () => updateOrderProductionStage(ord.id, 'in_kettle'),
+                                onConfirm: () => updateOrderProductionStage(ord.id, 'in_kettle', undefined, !isBatchingEligible),
                               });
                             }}
                             className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
                               stage === 'in_kettle' || stage === 'curing'
                                 ? 'bg-amber-500 text-white shadow-xs'
-                                : isBatchingEligible
-                                ? 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
-                                : 'text-neutral-300 dark:text-neutral-600 cursor-not-allowed opacity-50'
+                                : stage === 'queued'
+                                ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50'
+                                : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
                             }`}
-                            title={!isBatchingEligible ? 'Order must be approved with verified payment proof' : 'Move to Kettle, Whip & Curing'}
+                            title={
+                              stage === 'in_kettle' || stage === 'curing'
+                                ? 'Currently in Kettle, Whip & Curing'
+                                : stage === 'queued'
+                                ? 'Click to advance Order to Kettle, Whip & Curing'
+                                : 'Order has already completed Kettle & Cure'
+                            }
                           >
                             2. Kettle & Cure
                           </button>
+
+                          {/* 3. Packaging & QC */}
                           <button
                             type="button"
-                            disabled={!isBatchingEligible || (stage !== 'in_kettle' && stage !== 'curing')}
                             onClick={() => {
+                              if (stage === 'packaging' || stage === 'packaged') {
+                                setSafeguardDetails({
+                                  isOpen: true,
+                                  type: 'advance_stage',
+                                  title: `Order #${ord.id} is in Packaging & QC`,
+                                  confirmQuestion: `This requisition is currently undergoing weight verification, sealing, and quality control inspection.`,
+                                  branchName: ord.branchName,
+                                  orderId: ord.id,
+                                  fromStage: 'Packaging & QC',
+                                  toStage: 'Packaging & QC',
+                                  isInfoOnly: true,
+                                });
+                                return;
+                              }
+                              if (stage === 'ready_for_dispatch' || (stage as string) === 'ready') {
+                                setSafeguardDetails({
+                                  isOpen: true,
+                                  type: 'advance_stage',
+                                  title: `Order #${ord.id} Completed Packaging & QC`,
+                                  confirmQuestion: `This order has completed packaging and quality checks and is currently ready for dispatch.`,
+                                  branchName: ord.branchName,
+                                  orderId: ord.id,
+                                  fromStage: stage,
+                                  toStage: 'Packaging & QC',
+                                  isInfoOnly: true,
+                                });
+                                return;
+                              }
+                              if (stage === 'queued') {
+                                setSafeguardDetails({
+                                  isOpen: true,
+                                  type: 'advance_stage',
+                                  title: `Kettle & Cure Required First`,
+                                  confirmQuestion: `Order #${ord.id} is still queued. Artisanal marshmallows must be whipped and cured in the kitchen before packaging and quality inspection.`,
+                                  branchName: ord.branchName,
+                                  orderId: ord.id,
+                                  fromStage: 'Queued',
+                                  toStage: 'Packaging & QC',
+                                  isInfoOnly: true,
+                                });
+                                return;
+                              }
+
+                              // From in_kettle or curing to packaging:
                               setSafeguardDetails({
                                 isOpen: true,
                                 type: 'advance_stage',
                                 title: `Advance Order #${ord.id} to Packaging & QC?`,
+                                confirmQuestion: `Are you sure about this action? Advancing to Packaging & QC confirms that marshmallow slabs have finished curing and are ready for cutting, sealing, and barcode verification.`,
+                                confirmText: "Yes, I'm sure — Move to Packaging & QC",
                                 branchName: ord.branchName,
                                 orderId: ord.id,
                                 fromStage: 'Kettle & Cure',
                                 toStage: 'Packaging & QC',
-                                onConfirm: () => updateOrderProductionStage(ord.id, 'packaging'),
+                                onConfirm: () => updateOrderProductionStage(ord.id, 'packaging', undefined, !isBatchingEligible),
                               });
                             }}
                             className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
                               stage === 'packaging' || stage === 'packaged'
                                 ? 'bg-purple-500 text-white shadow-xs'
-                                : isBatchingEligible && (stage === 'in_kettle' || stage === 'curing')
-                                ? 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
-                                : 'text-neutral-300 dark:text-neutral-600 cursor-not-allowed opacity-50'
+                                : stage === 'in_kettle' || stage === 'curing'
+                                ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/50'
+                                : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
                             }`}
-                            title={!isBatchingEligible ? 'Order must be approved with verified payment proof' : 'Move to Packaging & QC'}
+                            title={
+                              stage === 'packaging' || stage === 'packaged'
+                                ? 'Currently in Packaging & QC'
+                                : stage === 'in_kettle' || stage === 'curing'
+                                ? 'Click to advance Order to Packaging & QC'
+                                : 'Complete Kettle & Cure before moving to Packaging & QC'
+                            }
                           >
                             3. Packaging & QC
                           </button>
+
+                          {/* 4. Ready for Dispatch */}
                           <button
                             type="button"
-                            disabled={!isBatchingEligible || stage !== 'packaged'}
                             onClick={() => {
+                              if (stage === 'ready_for_dispatch' || (stage as string) === 'ready') {
+                                setSafeguardDetails({
+                                  isOpen: true,
+                                  type: 'advance_stage',
+                                  title: `Order #${ord.id} is Ready for Dispatch`,
+                                  confirmQuestion: `This requisition is packaged, QC-approved, and waiting for courier waybill assignment or fleet staging.`,
+                                  branchName: ord.branchName,
+                                  orderId: ord.id,
+                                  fromStage: 'Ready for Dispatch',
+                                  toStage: 'Ready for Dispatch',
+                                  isInfoOnly: true,
+                                });
+                                return;
+                              }
+                              if (stage === 'queued' || stage === 'in_kettle' || stage === 'curing') {
+                                setSafeguardDetails({
+                                  isOpen: true,
+                                  type: 'advance_stage',
+                                  title: `Packaging & QC Required First`,
+                                  confirmQuestion: `Order #${ord.id} must complete boiling, curing, packaging, and quality inspection before it can be marked ready for logistics dispatch.`,
+                                  branchName: ord.branchName,
+                                  orderId: ord.id,
+                                  fromStage: stage,
+                                  toStage: 'Ready for Dispatch',
+                                  isInfoOnly: true,
+                                });
+                                return;
+                              }
+
+                              // From packaging to ready_for_dispatch
                               setSafeguardDetails({
                                 isOpen: true,
                                 type: 'advance_stage',
                                 title: `Mark Order #${ord.id} Ready for Dispatch?`,
+                                confirmQuestion: `Are you sure about this action? Marking Ready for Dispatch will immediately broadcast a real-time dispatch alert to Logistics & Fleet Management to generate J&T Express waybills or fleet delivery assignment.`,
+                                confirmText: "Yes, I'm sure — Ready for Dispatch",
                                 branchName: ord.branchName,
                                 orderId: ord.id,
                                 fromStage: 'Packaging & QC',
                                 toStage: 'Ready for Dispatch',
-                                onConfirm: () => updateOrderProductionStage(ord.id, 'ready_for_dispatch'),
+                                onConfirm: () => updateOrderProductionStage(ord.id, 'ready_for_dispatch', undefined, !isBatchingEligible),
                               });
                             }}
                             className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
                               stage === 'ready_for_dispatch' || (stage as string) === 'ready'
                                 ? 'bg-emerald-500 text-white shadow-xs'
-                                : isBatchingEligible && stage === 'packaged'
-                                ? 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
-                                : 'text-neutral-300 dark:text-neutral-600 cursor-not-allowed opacity-50'
+                                : stage === 'packaged' || stage === 'packaging'
+                                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                                : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'
                             }`}
-                            title={!isBatchingEligible ? 'Order must be approved with verified payment proof' : 'Complete Packaging & QC before marking Ready for Dispatch'}
+                            title={
+                              stage === 'ready_for_dispatch' || (stage as string) === 'ready'
+                                ? 'Ready for Dispatch'
+                                : stage === 'packaged' || stage === 'packaging'
+                                ? 'Click to mark Order Ready for Dispatch'
+                                : 'Complete Packaging & QC before marking Ready for Dispatch'
+                            }
                           >
                             4. Ready for Dispatch
                           </button>
@@ -561,30 +749,47 @@ export const AdminProduction: React.FC = () => {
                         {stage === 'queued' && (
                           <button
                             type="button"
-                            disabled={!isBatchingEligible}
                             onClick={() => {
+                              if (!isBatchingEligible) {
+                                setSafeguardDetails({
+                                  isOpen: true,
+                                  type: 'send_to_kitchen',
+                                  title: `Order #${ord.id} Requires Approval`,
+                                  confirmQuestion: `Are you sure about this action? Order #${ord.id} is currently ${!isApproved ? 'under review / waiting approval' : 'missing payment proof'}. Sending to live kitchen will authorize this order for commissary batch cooking.`,
+                                  warningNotice: 'Order requires finance approval and payment proof verification.',
+                                  confirmText: "Yes, Authorize & Send to Kitchen",
+                                  branchName: ord.branchName,
+                                  orderId: ord.id,
+                                  quantity: totalUnits,
+                                  onConfirm: () => {
+                                    if (!isApproved) {
+                                      approveOrder(ord.id, true);
+                                    }
+                                    produceForOrder(ord.id, undefined, undefined, true);
+                                  },
+                                });
+                                return;
+                              }
                               setSafeguardDetails({
                                 isOpen: true,
                                 type: 'send_to_kitchen',
                                 title: `Send Requisition to Live Kitchen Stoves?`,
+                                confirmQuestion: `Are you sure about this action? This will allocate ingredients and dispatch batch cooking for Order #${ord.id} (${ord.branchName}) at the Bicol commissary kitchen.`,
+                                confirmText: "Yes, Send to Kitchen",
                                 branchName: ord.branchName,
                                 orderId: ord.id,
                                 quantity: totalUnits,
                                 onConfirm: () => {
-                                  try {
-                                    produceForOrder(ord.id);
-                                  } catch (err: any) {
-                                    alert(err.message || 'Cannot start kitchen production');
-                                  }
+                                  produceForOrder(ord.id);
                                 },
                               });
                             }}
-                            className={`w-full sm:w-auto px-3.5 py-2 rounded-xl text-xs font-bold shadow-xs flex items-center justify-center space-x-1.5 transition-all ${
+                            className={`w-full sm:w-auto px-3.5 py-2 rounded-xl text-xs font-bold shadow-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
                               isBatchingEligible
-                                ? 'bg-gradient-to-r from-[#F37021] to-amber-500 text-white hover:opacity-95 cursor-pointer'
-                                : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500 cursor-not-allowed border border-neutral-300 dark:border-neutral-700'
+                                ? 'bg-gradient-to-r from-[#F37021] to-amber-500 text-white hover:opacity-95'
+                                : 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/40'
                             }`}
-                            title={!isBatchingEligible ? 'Order must be approved with verified payment proof before commissary batching.' : 'Send to Kitchen'}
+                            title="Send order to live kitchen stoves"
                           >
                             <Flame className="w-3.5 h-3.5 shrink-0" />
                             <span>🔥 Send to Kitchen</span>
@@ -704,6 +909,8 @@ export const AdminProduction: React.FC = () => {
                                 isOpen: true,
                                 type: 'advance_stage',
                                 title: `Move Batch ${batch.batchCode} to Packaging & QC?`,
+                                confirmQuestion: `Are you sure about this action? Advancing Batch ${batch.batchCode} (${batch.productFlavor}) to Packaging & QC verifies that kettle cooking and marshmallow slab curing are completed.`,
+                                confirmText: "Yes, I'm sure — Move to Packaging & QC",
                                 flavor: batch.productFlavor,
                                 batchCode: batch.batchCode,
                                 fromStage: 'Kettle & Cure',
@@ -725,6 +932,8 @@ export const AdminProduction: React.FC = () => {
                                 isOpen: true,
                                 type: 'advance_stage',
                                 title: `Mark Batch ${batch.batchCode} Finished & Ready?`,
+                                confirmQuestion: `Are you sure about this action? Marking Batch ${batch.batchCode} Finished & Ready will make these gourmet marshmallows available for branch allocation and logistics dispatch.`,
+                                confirmText: "Yes, I'm sure — Mark Finished & Ready",
                                 flavor: batch.productFlavor,
                                 batchCode: batch.batchCode,
                                 fromStage: 'Packaging & QC',
@@ -958,97 +1167,119 @@ export const AdminProduction: React.FC = () => {
 
       {/* Start Production Batch Modal */}
       {showLogModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className={`w-full max-w-md rounded-3xl p-6 shadow-2xl border ${
-            isDark ? 'bg-[#1c1c1c] border-neutral-700 text-white' : 'bg-white border-neutral-200 text-neutral-900'
-          }`}>
-            <div className="flex items-center space-x-2 text-[#F37021] mb-2">
-              <Flame className="w-5 h-5" />
-              <h3 className="text-base font-bold">Start Handmade MTO Batch</h3>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
+          onClick={() => setShowLogModal(false)}
+        >
+          <div
+            className={`relative w-full max-w-md max-h-[88vh] flex flex-col rounded-3xl shadow-2xl border overflow-hidden my-auto ${
+              isDark ? 'bg-[#1c1c1c] border-neutral-700 text-white' : 'bg-white border-neutral-200 text-neutral-900'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="shrink-0 p-5 sm:p-6 border-b border-neutral-100 dark:border-neutral-800 flex items-start justify-between">
+              <div>
+                <div className="flex items-center space-x-2 text-[#F37021] mb-1">
+                  <Flame className="w-5 h-5 shrink-0" />
+                  <h3 className="text-base font-bold">Start Handmade MTO Batch</h3>
+                </div>
+                <p className="text-xs text-neutral-500">
+                  Initiate a fresh kettle cooking and whipping run at the Bicol commissary.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLogModal(false)}
+                className="p-1.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors cursor-pointer shrink-0 ml-2"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <p className="text-xs text-neutral-500">
-              Initiate a fresh kettle cooking and whipping run at the Bicol commissary.
-            </p>
 
-            <form onSubmit={handleStartCustomBatch} className="mt-4 space-y-3 text-xs">
-              <div>
-                <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                  Gourmet Flavor Recipe
-                </label>
-                <select
-                  value={selectedProductId}
-                  onChange={(e) => setSelectedProductId(e.target.value)}
-                  className={`w-full p-2.5 rounded-xl border font-semibold ${
-                    isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
-                  }`}
-                >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.flavor} (Current Buffer: {p.adminStock} units)
-                    </option>
-                  ))}
-                </select>
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleStartCustomBatch} className="flex-1 overflow-y-auto flex flex-col">
+              <div className="p-5 sm:p-6 space-y-3.5 text-xs flex-1">
+                <div>
+                  <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
+                    Gourmet Flavor Recipe
+                  </label>
+                  <select
+                    value={selectedProductId}
+                    onChange={(e) => setSelectedProductId(e.target.value)}
+                    className={`w-full p-2.5 rounded-xl border font-semibold ${
+                      isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
+                    }`}
+                  >
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.flavor} (Current Buffer: {p.adminStock} units)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
+                    Assigned Head Confectioner
+                  </label>
+                  <select
+                    value={selectedChef}
+                    onChange={(e) => setSelectedChef(e.target.value)}
+                    className={`w-full p-2.5 rounded-xl border font-semibold ${
+                      isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
+                    }`}
+                  >
+                    <option value="Chef Dante (Head Confectioner)">Chef Dante (Head Confectioner)</option>
+                    <option value="Chef Maria (Bicol Fluff Artisan)">Chef Maria (Bicol Fluff Artisan)</option>
+                    <option value="Chef Roland (Sugar & Texture Specialist)">Chef Roland (Sugar & Texture Specialist)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
+                    Batch Output Quantity (Units)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={productionQty}
+                    onChange={(e) => setProductionQty(Number(e.target.value))}
+                    className={`w-full p-2.5 rounded-xl border font-bold text-sm ${
+                      isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
+                    Batch Notes
+                  </label>
+                  <input
+                    type="text"
+                    value={batchNotes}
+                    onChange={(e) => setBatchNotes(e.target.value)}
+                    placeholder="e.g. Made-to-order artisanal cook for franchise requisitions"
+                    className={`w-full p-2.5 rounded-xl border ${
+                      isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
+                    }`}
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                  Assigned Head Confectioner
-                </label>
-                <select
-                  value={selectedChef}
-                  onChange={(e) => setSelectedChef(e.target.value)}
-                  className={`w-full p-2.5 rounded-xl border font-semibold ${
-                    isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
-                  }`}
-                >
-                  <option value="Chef Dante (Head Confectioner)">Chef Dante (Head Confectioner)</option>
-                  <option value="Chef Maria (Bicol Fluff Artisan)">Chef Maria (Bicol Fluff Artisan)</option>
-                  <option value="Chef Roland (Sugar & Texture Specialist)">Chef Roland (Sugar & Texture Specialist)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                  Batch Output Quantity (Units)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  value={productionQty}
-                  onChange={(e) => setProductionQty(Number(e.target.value))}
-                  className={`w-full p-2.5 rounded-xl border font-bold text-sm ${
-                    isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
-                  }`}
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                  Batch Notes
-                </label>
-                <input
-                  type="text"
-                  value={batchNotes}
-                  onChange={(e) => setBatchNotes(e.target.value)}
-                  placeholder="e.g. Made-to-order artisanal cook for franchise requisitions"
-                  className={`w-full p-2.5 rounded-xl border ${
-                    isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
-                  }`}
-                />
-              </div>
-
-              <div className="flex items-center justify-end space-x-2 pt-3">
+              {/* Sticky Action Footer */}
+              <div className="shrink-0 p-4 sm:p-5 border-t border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/50 flex items-center justify-end space-x-2">
                 <button
                   type="button"
                   onClick={() => setShowLogModal(false)}
-                  className="px-3.5 py-2 font-medium rounded-xl border border-neutral-300 dark:border-neutral-700 cursor-pointer"
+                  className="px-4 py-2 font-medium rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 font-bold rounded-xl bg-[#F37021] text-white hover:bg-[#d85e15] cursor-pointer"
+                  className="px-4 py-2 font-bold rounded-xl bg-[#F37021] text-white hover:bg-[#d85e15] text-xs cursor-pointer shadow-xs"
                 >
                   Start Kettle Cook
                 </button>
@@ -1060,91 +1291,113 @@ export const AdminProduction: React.FC = () => {
 
       {/* Direct Branch Allocation Modal */}
       {showTransferModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className={`w-full max-w-md rounded-3xl p-6 shadow-2xl border ${
-            isDark ? 'bg-[#1c1c1c] border-neutral-700 text-white' : 'bg-white border-neutral-200 text-neutral-900'
-          }`}>
-            <div className="flex items-center space-x-2 text-[#80C7F2] mb-2">
-              <ArrowRightLeft className="w-5 h-5" />
-              <h3 className="text-base font-bold">Allocate Stock to Branch</h3>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
+          onClick={() => setShowTransferModal(false)}
+        >
+          <div
+            className={`relative w-full max-w-md max-h-[88vh] flex flex-col rounded-3xl shadow-2xl border overflow-hidden my-auto ${
+              isDark ? 'bg-[#1c1c1c] border-neutral-700 text-white' : 'bg-white border-neutral-200 text-neutral-900'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="shrink-0 p-5 sm:p-6 border-b border-neutral-100 dark:border-neutral-800 flex items-start justify-between">
+              <div>
+                <div className="flex items-center space-x-2 text-[#80C7F2] mb-1">
+                  <ArrowRightLeft className="w-5 h-5 shrink-0" />
+                  <h3 className="text-base font-bold">Allocate Stock to Branch</h3>
+                </div>
+                <p className="text-xs text-neutral-500">
+                  Transfer finished inventory directly from HQ Commissary buffer to a franchise branch.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTransferModal(false)}
+                className="p-1.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors cursor-pointer shrink-0 ml-2"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <p className="text-xs text-neutral-500">
-              Transfer finished inventory directly from HQ Commissary buffer to a franchise branch.
-            </p>
 
-            {transferError && (
-              <div className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-500 flex items-center space-x-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{transferError}</span>
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleTransferStock} className="flex-1 overflow-y-auto flex flex-col">
+              <div className="p-5 sm:p-6 space-y-3.5 text-xs flex-1">
+                {transferError && (
+                  <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-500 flex items-center space-x-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{transferError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
+                    Destination Franchise Branch
+                  </label>
+                  <select
+                    value={transferBranchId}
+                    onChange={(e) => setTransferBranchId(e.target.value)}
+                    className={`w-full p-2.5 rounded-xl border font-semibold ${
+                      isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
+                    }`}
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.location})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
+                    Flavor Selection
+                  </label>
+                  <select
+                    value={transferProductId}
+                    onChange={(e) => setTransferProductId(e.target.value)}
+                    className={`w-full p-2.5 rounded-xl border font-semibold ${
+                      isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
+                    }`}
+                  >
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.flavor} (Available Buffer: {p.adminStock} units)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
+                    Transfer Quantity (Units)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={transferQty}
+                    onChange={(e) => setTransferQty(Number(e.target.value))}
+                    className={`w-full p-2.5 rounded-xl border font-bold text-sm ${
+                      isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
+                    }`}
+                  />
+                </div>
               </div>
-            )}
 
-            <form onSubmit={handleTransferStock} className="mt-4 space-y-3 text-xs">
-              <div>
-                <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                  Destination Franchise Branch
-                </label>
-                <select
-                  value={transferBranchId}
-                  onChange={(e) => setTransferBranchId(e.target.value)}
-                  className={`w-full p-2.5 rounded-xl border font-semibold ${
-                    isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
-                  }`}
-                >
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.location})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                  Flavor Selection
-                </label>
-                <select
-                  value={transferProductId}
-                  onChange={(e) => setTransferProductId(e.target.value)}
-                  className={`w-full p-2.5 rounded-xl border font-semibold ${
-                    isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
-                  }`}
-                >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.flavor} (Available Buffer: {p.adminStock} units)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                  Transfer Quantity (Units)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  value={transferQty}
-                  onChange={(e) => setTransferQty(Number(e.target.value))}
-                  className={`w-full p-2.5 rounded-xl border font-bold text-sm ${
-                    isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
-                  }`}
-                />
-              </div>
-
-              <div className="flex items-center justify-end space-x-2 pt-3">
+              {/* Sticky Action Footer */}
+              <div className="shrink-0 p-4 sm:p-5 border-t border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/50 flex items-center justify-end space-x-2">
                 <button
                   type="button"
                   onClick={() => setShowTransferModal(false)}
-                  className="px-3.5 py-2 font-medium rounded-xl border border-neutral-300 dark:border-neutral-700 cursor-pointer"
+                  className="px-4 py-2 font-medium rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 font-bold rounded-xl bg-[#80C7F2] text-neutral-900 hover:bg-[#6ab9e8] cursor-pointer"
+                  className="px-4 py-2 font-bold rounded-xl bg-[#80C7F2] text-neutral-900 hover:bg-[#6ab9e8] text-xs cursor-pointer shadow-xs"
                 >
                   Review & Confirm Transfer
                 </button>
@@ -1156,61 +1409,48 @@ export const AdminProduction: React.FC = () => {
 
       {/* Add / Edit Product Modal */}
       {showProductModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className={`w-full max-w-md rounded-3xl p-6 shadow-2xl border ${
-            isDark ? 'bg-[#1c1c1c] border-neutral-700 text-white' : 'bg-white border-neutral-200 text-neutral-900'
-          }`}>
-            <h3 className="text-base font-bold">
-              {editingProduct ? 'Edit Gourmet Flavor' : 'Add New Gourmet Flavor'}
-            </h3>
-            <p className="text-xs text-neutral-500 mt-1">
-              Configure product details and central commissary inventory.
-            </p>
-
-            <form onSubmit={handleSaveProduct} className="mt-4 space-y-3 text-xs">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
+          onClick={() => setShowProductModal(false)}
+        >
+          <div
+            className={`relative w-full max-w-md max-h-[88vh] flex flex-col rounded-3xl shadow-2xl border overflow-hidden my-auto ${
+              isDark ? 'bg-[#1c1c1c] border-neutral-700 text-white' : 'bg-white border-neutral-200 text-neutral-900'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="shrink-0 p-5 sm:p-6 border-b border-neutral-100 dark:border-neutral-800 flex items-start justify-between">
               <div>
-                <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                  Flavor Name / Ingredients
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formFlavor}
-                  onChange={(e) => setFormFlavor(e.target.value)}
-                  placeholder="e.g. Pistachio Ganache & Fluff"
-                  className={`w-full p-2.5 rounded-xl border ${
-                    isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
-                  }`}
-                />
+                <h3 className="text-base font-bold">
+                  {editingProduct ? 'Edit Gourmet Flavor' : 'Add New Gourmet Flavor'}
+                </h3>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Configure product details and central commissary inventory.
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={() => setShowProductModal(false)}
+                className="p-1.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors cursor-pointer shrink-0 ml-2"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-              <div>
-                <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                  Product Category Title
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="Gourmet Marshmallow"
-                  className={`w-full p-2.5 rounded-xl border ${
-                    isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
-                  }`}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleSaveProduct} className="flex-1 overflow-y-auto flex flex-col">
+              <div className="p-5 sm:p-6 space-y-3.5 text-xs flex-1">
                 <div>
                   <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                    Price (₱)
+                    Flavor Name / Ingredients
                   </label>
                   <input
-                    type="number"
-                    min="1"
+                    type="text"
                     required
-                    value={formPrice}
-                    onChange={(e) => setFormPrice(Number(e.target.value))}
+                    value={formFlavor}
+                    onChange={(e) => setFormFlavor(e.target.value)}
+                    placeholder="e.g. Pistachio Ganache & Fluff"
                     className={`w-full p-2.5 rounded-xl border ${
                       isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
                     }`}
@@ -1219,32 +1459,67 @@ export const AdminProduction: React.FC = () => {
 
                 <div>
                   <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                    Commissary Buffer Stock
+                    Product Category Title
                   </label>
                   <input
-                    type="number"
-                    min="0"
+                    type="text"
                     required
-                    value={formStock}
-                    onChange={(e) => setFormStock(Number(e.target.value))}
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    placeholder="Gourmet Marshmallow"
                     className={`w-full p-2.5 rounded-xl border ${
                       isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
                     }`}
                   />
                 </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
+                      Price (₱)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={formPrice}
+                      onChange={(e) => setFormPrice(Number(e.target.value))}
+                      className={`w-full p-2.5 rounded-xl border ${
+                        isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold uppercase tracking-wider text-neutral-400 mb-1">
+                      Commissary Buffer Stock
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      required
+                      value={formStock}
+                      onChange={(e) => setFormStock(Number(e.target.value))}
+                      className={`w-full p-2.5 rounded-xl border ${
+                        isDark ? 'bg-neutral-900 border-neutral-700 text-white' : 'bg-neutral-50 border-neutral-200'
+                      }`}
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-3">
+              {/* Sticky Action Footer */}
+              <div className="shrink-0 p-4 sm:p-5 border-t border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/50 flex items-center justify-end space-x-2">
                 <button
                   type="button"
                   onClick={() => setShowProductModal(false)}
-                  className="px-3.5 py-2 font-medium rounded-xl border border-neutral-300 dark:border-neutral-700 cursor-pointer"
+                  className="px-4 py-2 font-medium rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 font-bold rounded-xl bg-[#F37021] text-white hover:bg-[#d85e15] cursor-pointer"
+                  className="px-4 py-2 font-bold rounded-xl bg-[#F37021] text-white hover:bg-[#d85e15] text-xs cursor-pointer shadow-xs"
                 >
                   Save Flavor
                 </button>

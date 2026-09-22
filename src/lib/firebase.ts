@@ -18,15 +18,32 @@ const rawFirebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
 };
 
-const missingConfig = Object.entries(rawFirebaseConfig)
-  .filter(([, value]) => !value)
-  .map(([key]) => key);
+function isValidEnvValue(val?: string): boolean {
+  if (!val || typeof val !== 'string') return false;
+  const trimmed = val.trim();
+  if (!trimmed) return false;
+  if (
+    trimmed.startsWith('your-') ||
+    trimmed.includes('your-firebase') ||
+    trimmed.includes('your-project') ||
+    trimmed.includes('your-firestore') ||
+    trimmed.includes('placeholder') ||
+    trimmed.includes('example') ||
+    trimmed === 'demo-vertexis'
+  ) {
+    return false;
+  }
+  return true;
+}
 
-export const isFirebaseConfigured = missingConfig.length === 0;
+export const isFirebaseConfigured =
+  isValidEnvValue(rawFirebaseConfig.projectId) &&
+  isValidEnvValue(rawFirebaseConfig.apiKey) &&
+  isValidEnvValue(rawFirebaseConfig.appId);
 
 if (!isFirebaseConfigured) {
-  console.warn(
-    `[Firebase] Missing Firebase environment variables: ${missingConfig.join(', ')}. Initializing in local fallback mode.`
+  console.info(
+    '[Firebase] Active environment contains placeholder/unconfigured Firebase credentials. Operating in local demo/offline mode.'
   );
 }
 
