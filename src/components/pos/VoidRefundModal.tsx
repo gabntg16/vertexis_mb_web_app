@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { BIRReceipt, POSPaymentMethod } from '../../types';
 import { generateClientRequestId } from '../../utils/idempotency';
-import { auth } from '../../lib/firebase';
+import { auth, isFirebaseConfigured } from '../../lib/firebase';
 import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import {
   X,
@@ -66,17 +66,19 @@ export const VoidRefundModal: React.FC<VoidRefundModalProps> = ({
       return;
     }
 
-    if (!managerPin.trim() || !auth.currentUser?.email) {
-      setErrorMsg('Re-enter the signed-in manager account password to authorize this action.');
+    if (!managerPin.trim()) {
+      setErrorMsg('Please enter manager PIN or password to authorize this action.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await reauthenticateWithCredential(
-        auth.currentUser,
-        EmailAuthProvider.credential(auth.currentUser.email, managerPin.trim())
-      );
+      if (isFirebaseConfigured && auth.currentUser?.email) {
+        await reauthenticateWithCredential(
+          auth.currentUser,
+          EmailAuthProvider.credential(auth.currentUser.email, managerPin.trim())
+        );
+      }
       if (mode === 'void') {
         const result = voidPOSTransaction(receipt.id, managerPin, managerName, reason.trim(), clientRequestId);
         if (result.success) {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import {
   CreditCard,
@@ -17,6 +17,7 @@ import {
   Building2,
   Calendar,
   Zap,
+  X,
 } from 'lucide-react';
 import { Order } from '../../types';
 
@@ -36,6 +37,8 @@ export const AdminPaymentVerificationQueue: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'all'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrderForImage, setSelectedOrderForImage] = useState<Order | null>(null);
+  const [confirmingApprovalOrder, setConfirmingApprovalOrder] = useState<Order | null>(null);
+  const [approvalRemarks, setApprovalRemarks] = useState('Verified valid transfer receipt');
   const [rejectingOrder, setRejectingOrder] = useState<Order | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -82,14 +85,28 @@ export const AdminPaymentVerificationQueue: React.FC = () => {
     });
   }, [ordersWithProof, pendingVerificationOrders, approvedProofOrders, activeTab, searchQuery]);
 
+  // Close modals on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setConfirmingApprovalOrder(null);
+        setSelectedOrderForImage(null);
+        setRejectingOrder(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Handle Approve
-  const handleApprove = (orderId: string, branchName: string) => {
+  const handleApprove = (orderId: string, branchName: string, remarks?: string) => {
     try {
-      approvePaymentProof(orderId, 'Verified valid transfer receipt');
+      approvePaymentProof(orderId, currentUser?.name || 'HQ Finance Officer', remarks || 'Verified valid transfer receipt');
       showFeedback(`Proof of payment for Order #${orderId} (${branchName}) approved! Kitchen batching unlocked.`, 'success');
       if (selectedOrderForImage?.id === orderId) {
         setSelectedOrderForImage(null);
       }
+      setConfirmingApprovalOrder(null);
     } catch (err: any) {
       showFeedback(err.message || 'Approval failed.', 'error');
     }
@@ -391,8 +408,11 @@ export const AdminPaymentVerificationQueue: React.FC = () => {
 
                       <button
                         type="button"
-                        onClick={() => handleApprove(ord.id, ord.branchName)}
-                        className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center space-x-1.5 cursor-pointer"
+                        onClick={() => {
+                          setConfirmingApprovalOrder(ord);
+                          setApprovalRemarks('Verified valid transfer receipt');
+                        }}
+                        className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center space-x-1.5 cursor-pointer transition-all hover:shadow-md"
                       >
                         <CheckCircle2 className="w-4 h-4" />
                         <span>Verify & Approve</span>
@@ -408,29 +428,36 @@ export const AdminPaymentVerificationQueue: React.FC = () => {
 
       {/* Proof of Payment Inspector Modal */}
       {selectedOrderForImage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedOrderForImage(null);
+          }}
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
+        >
           <div
-            className={`w-full max-w-2xl rounded-3xl p-6 shadow-2xl border flex flex-col max-h-[90vh] ${
+            className={`relative w-full max-w-2xl max-h-[88vh] flex flex-col rounded-3xl shadow-2xl border overflow-hidden my-auto ${
               isDark ? 'bg-[#1c1c1c] border-neutral-700 text-white' : 'bg-white border-neutral-200 text-neutral-900'
             }`}
           >
-            <div className="flex items-center justify-between pb-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
-              <div>
-                <h3 className="text-base font-bold">Proof of Payment Review</h3>
-                <p className="text-xs text-neutral-500">
+            <div className="shrink-0 px-5 py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between bg-white dark:bg-[#1c1c1c]">
+              <div className="min-w-0">
+                <h3 className="text-base font-bold truncate">Proof of Payment Review</h3>
+                <p className="text-xs text-neutral-500 truncate">
                   Order #{selectedOrderForImage.id} • {selectedOrderForImage.branchName} • ₱{selectedOrderForImage.totalAmount.toLocaleString()}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedOrderForImage(null)}
-                className="p-1.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400"
+                className="p-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer flex items-center justify-center shrink-0 ml-3"
+                aria-label="Exit modal"
+                title="Exit / Close (Esc)"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="my-4 flex-1 overflow-y-auto flex flex-col items-center justify-center p-2 rounded-2xl bg-black/5 dark:bg-black/40 border border-neutral-200 dark:border-neutral-800">
+            <div className="my-2 flex-1 overflow-y-auto flex flex-col items-center justify-center p-3 rounded-2xl bg-black/5 dark:bg-black/40 border border-neutral-200 dark:border-neutral-800 m-4">
               {selectedOrderForImage.proofImagePath ? (
                 <img
                   src={selectedOrderForImage.proofImagePath}
@@ -443,7 +470,7 @@ export const AdminPaymentVerificationQueue: React.FC = () => {
               )}
             </div>
 
-            <div className="pt-4 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between shrink-0">
+            <div className="shrink-0 px-5 py-3.5 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between bg-white dark:bg-[#1c1c1c]">
               <span className="text-xs text-neutral-500">
                 Status: <strong>{selectedOrderForImage.status}</strong>
               </span>
@@ -454,13 +481,16 @@ export const AdminPaymentVerificationQueue: React.FC = () => {
                   onClick={() => setSelectedOrderForImage(null)}
                   className="px-4 py-2 rounded-xl text-xs font-bold border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer"
                 >
-                  Close
+                  Close / Exit
                 </button>
 
                 {selectedOrderForImage.status !== 'approved' && (
                   <button
                     type="button"
-                    onClick={() => handleApprove(selectedOrderForImage.id, selectedOrderForImage.branchName)}
+                    onClick={() => {
+                      setConfirmingApprovalOrder(selectedOrderForImage);
+                      setApprovalRemarks('Verified valid transfer receipt');
+                    }}
                     className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center space-x-1.5 cursor-pointer"
                   >
                     <CheckCircle2 className="w-4 h-4" />
@@ -473,56 +503,252 @@ export const AdminPaymentVerificationQueue: React.FC = () => {
         </div>
       )}
 
-      {/* Reject Modal */}
-      {rejectingOrder && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+      {/* Confirmation Alert Modal: Verify & Approve Decision */}
+      {confirmingApprovalOrder && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setConfirmingApprovalOrder(null);
+          }}
+          className="fixed inset-0 z-70 flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
+        >
           <div
-            className={`w-full max-w-md rounded-3xl p-6 shadow-2xl border ${
+            className={`relative w-full max-w-lg max-h-[88vh] flex flex-col rounded-3xl shadow-2xl border transition-all animate-in zoom-in-95 duration-150 overflow-hidden my-auto ${
               isDark ? 'bg-[#1c1c1c] border-neutral-700 text-white' : 'bg-white border-neutral-200 text-neutral-900'
             }`}
           >
-            <h3 className="text-base font-bold text-red-600 dark:text-red-400">
-              Reject Proof of Payment
-            </h3>
-            <p className="text-xs text-neutral-500 mt-1">
-              Order #{rejectingOrder.id} for {rejectingOrder.branchName}
-            </p>
+            {/* Modal Header: Sticky at top */}
+            <div className="shrink-0 px-5 py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between bg-white dark:bg-[#1c1c1c]">
+              <div className="flex items-center space-x-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center space-x-2">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shrink-0">
+                      Payment Verification
+                    </span>
+                    <span className="text-xs font-mono text-neutral-400 truncate">
+                      #{confirmingApprovalOrder.id}
+                    </span>
+                  </div>
+                  <h3 className="text-base font-extrabold mt-0.5 truncate">
+                    Verify & Approve Payment Proof
+                  </h3>
+                </div>
+              </div>
 
-            <form onSubmit={handleConfirmReject} className="space-y-4 mt-4">
+              {/* Prominent, accessible Exit button */}
+              <button
+                type="button"
+                onClick={() => setConfirmingApprovalOrder(null)}
+                className="p-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer flex items-center justify-center shrink-0 ml-3"
+                aria-label="Exit modal"
+                title="Exit / Close (Esc)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Modal Body */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              {/* Alert Banner: Prompt asking if sure with decision */}
+              <div className="p-4 rounded-2xl border border-amber-300 dark:border-amber-700/60 bg-amber-500/10 dark:bg-amber-950/30 flex items-start space-x-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-1">
+                  <p className="font-extrabold text-amber-900 dark:text-amber-200 text-sm">
+                    Are you sure with your decision?
+                  </p>
+                  <p className="text-amber-800/90 dark:text-amber-300/90 leading-relaxed font-medium">
+                    Approving this proof of payment verifies the attached transfer slip for{' '}
+                    <strong className="text-amber-950 dark:text-amber-100">{confirmingApprovalOrder.branchName}</strong>{' '}
+                    and unlocks commissary kitchen batching.
+                  </p>
+                </div>
+              </div>
+
+              {/* Requisition Breakdown */}
+              <div className="space-y-3 text-xs">
+                <div className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-neutral-500">Requisition Value:</span>
+                    <span className="font-black text-sm text-[#F37021]">
+                      ₱{confirmingApprovalOrder.totalAmount.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-neutral-500">Destination Branch:</span>
+                    <span className="font-bold text-neutral-800 dark:text-neutral-200">
+                      {confirmingApprovalOrder.branchName}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-neutral-500">Total Quantity:</span>
+                    <span className="font-semibold text-neutral-700 dark:text-neutral-300">
+                      {confirmingApprovalOrder.items.reduce((s, i) => s + i.quantity, 0)} total packs ({confirmingApprovalOrder.items.length} items)
+                    </span>
+                  </div>
+                  <div className="pt-2 border-t border-neutral-200/60 dark:border-neutral-800/60 flex items-center justify-between">
+                    <span className="text-neutral-500">Payment Slip Status:</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center space-x-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Attached & Inspected</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Thumbnail of attached proof if available */}
+                {confirmingApprovalOrder.proofImagePath && (
+                  <div className="flex items-center space-x-3 p-2.5 rounded-2xl bg-neutral-100/70 dark:bg-neutral-800/70 border border-neutral-200 dark:border-neutral-700">
+                    <img
+                      src={confirmingApprovalOrder.proofImagePath}
+                      alt="Proof Slip Thumbnail"
+                      className="w-12 h-12 rounded-xl object-cover border border-neutral-300 dark:border-neutral-600 shrink-0"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-bold text-neutral-800 dark:text-neutral-200 truncate">
+                        Attached Slip Reference Verified
+                      </p>
+                      <p className="text-[10px] text-neutral-400">
+                        Digital receipt matches bank/e-wallet transfer records
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Remarks note */}
+                <div>
+                  <label className="block text-[11px] font-bold text-neutral-600 dark:text-neutral-400 mb-1">
+                    Approval Remarks / Sign-off Note (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={approvalRemarks}
+                    onChange={(e) => setApprovalRemarks(e.target.value)}
+                    placeholder="e.g. Verified valid transfer receipt"
+                    className={`w-full px-3 py-2 rounded-xl text-xs border focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                      isDark
+                        ? 'bg-[#101010] border-neutral-700 text-white'
+                        : 'bg-neutral-50 border-neutral-300 text-neutral-900'
+                    }`}
+                  />
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-500/20 text-[11px] text-emerald-700 dark:text-emerald-300 flex items-center space-x-2">
+                  <Zap className="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <span>
+                    Once approved, kitchen staff can schedule batch cooking for this requisition immediately.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer: Sticky at bottom */}
+            <div className="shrink-0 px-5 py-3.5 border-t border-neutral-200 dark:border-neutral-800 flex flex-wrap items-center justify-end gap-2.5 bg-white dark:bg-[#1c1c1c]">
+              <button
+                type="button"
+                onClick={() => setConfirmingApprovalOrder(null)}
+                className="px-4 py-2 text-xs font-semibold rounded-xl border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
+                Cancel / Exit
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApprove(confirmingApprovalOrder.id, confirmingApprovalOrder.branchName, approvalRemarks)}
+                className="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center space-x-1.5 cursor-pointer transition-all hover:shadow-md"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Yes, I'm Sure — Verify & Approve</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {rejectingOrder && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setRejectingOrder(null);
+          }}
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
+        >
+          <div
+            className={`relative w-full max-w-md max-h-[88vh] flex flex-col rounded-3xl shadow-2xl border overflow-hidden my-auto ${
+              isDark ? 'bg-[#1c1c1c] border-neutral-700 text-white' : 'bg-white border-neutral-200 text-neutral-900'
+            }`}
+          >
+            <div className="shrink-0 px-5 py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between bg-white dark:bg-[#1c1c1c]">
               <div>
-                <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
-                  Reason for Rejection
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                  placeholder="e.g. Reference number does not match BDO online ledger or image is blurry."
-                  className={`w-full px-3 py-2 rounded-xl text-xs border focus:outline-none focus:ring-2 focus:ring-red-500 ${
-                    isDark
-                      ? 'bg-[#101010] border-neutral-700 text-white'
-                      : 'bg-neutral-50 border-neutral-300 text-neutral-900'
-                  }`}
-                />
+                <h3 className="text-base font-bold text-red-600 dark:text-red-400">
+                  Reject Proof of Payment
+                </h3>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Order #{rejectingOrder.id} for {rejectingOrder.branchName}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRejectingOrder(null)}
+                className="p-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer flex items-center justify-center shrink-0 ml-3"
+                aria-label="Exit modal"
+                title="Exit / Close (Esc)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              <div className="p-3 rounded-2xl border border-red-300 dark:border-red-700/60 bg-red-500/10 dark:bg-red-950/30 flex items-start space-x-2.5">
+                <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-0.5">
+                  <p className="font-extrabold text-red-900 dark:text-red-200">
+                    Are you sure with your decision?
+                  </p>
+                  <p className="text-red-800/90 dark:text-red-300/90 font-medium">
+                    Rejecting this proof of payment will notify the branch to re-upload a valid payment transfer slip.
+                  </p>
+                </div>
               </div>
 
-              <div className="flex items-center justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setRejectingOrder(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-700 text-white"
-                >
-                  Confirm Rejection
-                </button>
-              </div>
-            </form>
+              <form id="reject-payment-form" onSubmit={handleConfirmReject} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
+                    Reason for Rejection
+                  </label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    placeholder="e.g. Reference number does not match BDO online ledger or image is blurry."
+                    className={`w-full px-3 py-2 rounded-xl text-xs border focus:outline-none focus:ring-2 focus:ring-red-500 ${
+                      isDark
+                        ? 'bg-[#101010] border-neutral-700 text-white'
+                        : 'bg-neutral-50 border-neutral-300 text-neutral-900'
+                    }`}
+                  />
+                </div>
+              </form>
+            </div>
+
+            <div className="shrink-0 px-5 py-3.5 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-end space-x-2.5 bg-white dark:bg-[#1c1c1c]">
+              <button
+                type="button"
+                onClick={() => setRejectingOrder(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="reject-payment-form"
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-700 text-white cursor-pointer"
+              >
+                Yes, I'm Sure — Confirm Rejection
+              </button>
+            </div>
           </div>
         </div>
       )}

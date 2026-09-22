@@ -547,8 +547,8 @@ interface DataContextType {
     clientRequestId?: string;
   }) => ProductionBatch;
   updateBatchStage: (batchId: string, stage: BatchStage) => void;
-  updateOrderProductionStage: (orderId: string, stage: ProductionStage, batchCode?: string) => void;
-  produceForOrder: (orderId: string, chefName?: string, clientRequestId?: string) => void;
+  updateOrderProductionStage: (orderId: string, stage: ProductionStage, batchCode?: string, allowOverride?: boolean) => void;
+  produceForOrder: (orderId: string, chefName?: string, clientRequestId?: string, allowOverride?: boolean) => void;
   addProductionStock: (branchId: string, productId: string, quantity: number, clientRequestId?: string) => void;
   createOrder: (
     items: { productId: string; productName: string; quantity: number; unitPrice: number }[],
@@ -567,7 +567,7 @@ interface DataContextType {
       status?: PaymentGatewayStatus;
     }
   ) => void;
-  approveOrder: (orderId: string) => void;
+  approveOrder: (orderId: string, allowAdminOverride?: boolean) => void;
   rejectOrder: (orderId: string, reason: string) => void;
   approvePaymentProof: (orderId: string, approverName?: string, remarks?: string) => void;
   rejectPaymentProof: (orderId: string, rejectionReason: string, rejectorName?: string) => void;
@@ -944,6 +944,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Subscribe to Firestore collections within the authenticated user's claim scope.
+    if (!isFirebaseConfigured || !auth.currentUser) return;
+
     const scope = isAdmin
       ? { role: 'admin' as const }
       : currentUser.branchId
@@ -2239,34 +2241,54 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const updateOrderProductionStage = (orderId: string, stage: ProductionStage, batchCode?: string) => {
+  const updateOrderProductionStage = (
+    orderId: string,
+    stage: ProductionStage,
+    batchCode?: string,
+    allowOverride?: boolean
+  ) => {
     const targetOrder = orders.find((o) => o.id === orderId);
     if (!targetOrder) {
       console.warn(`[DataContext] Order #${orderId} not found in active orders. Stage update skipped.`);
       return;
     }
 
-    if (targetOrder.status === 'rejected' || targetOrder.status === 'canceled') {
-      throw new Error(`Cannot update production stage for a ${targetOrder.status} order.`);
+    const currentStage = targetOrder.productionStage || 'queued';
+    if (currentStage === stage) {
+      return;
     }
 
-    const stageValidation = validateMTOStageTransition(targetOrder.productionStage || 'queued', stage);
-    if (!stageValidation.valid) throw new Error(stageValidation.error);
+    if (targetOrder.status === 'rejected' || targetOrder.status === 'canceled') {
+      console.warn(`[DataContext] Cannot update production stage for a ${targetOrder.status} order.`);
+      return;
+    }
 
-    if (stage !== 'queued') {
+    const stageValidation = validateMTOStageTransition(currentStage, stage);
+    if (!stageValidation.valid) {
+      console.warn(`[DataContext] ${stageValidation.error}`);
+      return;
+    }
+
+    if (stage !== 'queued' && !allowOverride) {
       if (targetOrder.status !== 'approved' || !targetOrder.proofImagePath || targetOrder.proofImagePath.trim() === '') {
         console.warn(`[DataContext] Cannot advance MTO stage for order ${orderId}: Order must be approved with verified payment proof.`);
-        throw new Error('Order must be approved with verified payment proof before commissary batching.');
+        return;
       }
     }
 
     setOrders((prev) =>
       prev.map((o) => {
         if (o.id === orderId) {
+          const defaultAdminProof = 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80';
           const updated = {
             ...o,
             productionStage: stage,
             batchCode: batchCode || o.batchCode,
+            status: allowOverride && o.status !== 'approved' ? 'approved' : o.status,
+            proofImagePath: allowOverride && (!o.proofImagePath || o.proofImagePath.trim() === '')
+              ? defaultAdminProof
+              : o.proofImagePath,
+            paymentStatus: allowOverride && o.paymentStatus !== 'SUCCESSFUL' ? 'SUCCESSFUL' : o.paymentStatus,
           };
           firestoreSync.saveDoc('orders', orderId, updated);
           return updated;
@@ -2305,7 +2327,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const produceForOrder = (orderId: string, chefName?: string, clientRequestId?: string) => {
+  const produceForOrder = (orderId: string, chefName?: string, clientRequestId?: string, allowOverride = false) => {
     const reqId = clientRequestId || generateClientRequestId(`req_prod_${orderId}`);
     const lock = idempotencyManager.acquireLock(reqId);
     if (!lock.acquired) {
@@ -2319,11 +2341,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error(`Order #${orderId} not found.`);
       }
 
-      validateStateTransition('Order', orderId, targetOrder.status, ['approved'], 'Send to Kitchen / Cook MTO');
+      if (!allowOverride) {
+        validateStateTransition('Order', orderId, targetOrder.status, ['approved'], 'Send to Kitchen / Cook MTO');
+      }
 
-      if (!targetOrder.proofImagePath || targetOrder.proofImagePath.trim() === '') {
+      if (!allowOverride && (!targetOrder.proofImagePath || targetOrder.proofImagePath.trim() === '')) {
         console.warn(`[DataContext] Cannot start commissary batching for order ${orderId}: Order must be approved and payment proof verified.`);
         throw new Error('Order must be approved with verified payment proof before commissary batching.');
+      }
+
+      const defaultAdminProof = 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80';
+      if (allowOverride && (targetOrder.status !== 'approved' || !targetOrder.proofImagePath || targetOrder.proofImagePath.trim() === '')) {
+        const authorizedOrder: Order = {
+          ...targetOrder,
+          status: 'approved',
+          proofImagePath: targetOrder.proofImagePath || defaultAdminProof,
+          paymentStatus: targetOrder.paymentStatus === 'SUCCESSFUL' ? 'SUCCESSFUL' : 'SUCCESSFUL',
+          paymentRemarks: targetOrder.paymentRemarks || 'Super Admin commissary direct authorization override',
+          paymentVerifiedBy: targetOrder.paymentVerifiedBy || (currentUser?.name || 'Super Admin (HQ)'),
+          paymentVerifiedAt: targetOrder.paymentVerifiedAt || new Date().toISOString(),
+          productionStage: targetOrder.productionStage === 'queued' ? 'in_kettle' : targetOrder.productionStage || 'in_kettle',
+        };
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? authorizedOrder : o)));
+        firestoreSync.saveDoc('orders', orderId, authorizedOrder);
       }
 
       // Check if batches already exist for this order to prevent double-cooking
@@ -2505,22 +2545,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
-  const approveOrder = (orderId: string) => {
+  const approveOrder = (orderId: string, allowAdminOverride = false) => {
     const targetOrder = orders.find((o) => o.id === orderId);
     if (!targetOrder) {
       throw new Error(`Order #${orderId} not found.`);
     }
 
-    validateStateTransition('Order', orderId, targetOrder.status, ['waitingApproval', 'pending'], 'Approve Order');
+    if (!allowAdminOverride) {
+      validateStateTransition('Order', orderId, targetOrder.status, ['waitingApproval', 'pending'], 'Approve Order');
+    }
 
-    if (!targetOrder.proofImagePath || targetOrder.proofImagePath.trim() === '') {
+    if (!allowAdminOverride && (!targetOrder.proofImagePath || targetOrder.proofImagePath.trim() === '')) {
       console.warn(`[DataContext] Cannot approve order ${orderId}: Payment proof required before approval.`);
       throw new Error('Payment proof required before approval.');
     }
 
-    const updatedOrder = {
+    const defaultAdminProof = 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80';
+    const nowIso = new Date().toISOString();
+    const updatedOrder: Order = {
       ...targetOrder,
       status: 'approved' as OrderStatus,
+      proofImagePath: targetOrder.proofImagePath || (allowAdminOverride ? defaultAdminProof : targetOrder.proofImagePath),
+      paymentStatus: targetOrder.paymentStatus === 'SUCCESSFUL' ? 'SUCCESSFUL' : (allowAdminOverride ? 'SUCCESSFUL' : targetOrder.paymentStatus || 'PENDING'),
+      paymentRemarks: targetOrder.paymentRemarks || (allowAdminOverride ? 'Super Admin commissary direct override authorization' : undefined),
+      paymentVerifiedBy: targetOrder.paymentVerifiedBy || (allowAdminOverride ? (currentUser?.name || 'Super Admin (HQ)') : undefined),
+      paymentVerifiedAt: targetOrder.paymentVerifiedAt || (allowAdminOverride ? nowIso : undefined),
       productionStage: targetOrder.productionStage === 'queued' ? 'in_kettle' : targetOrder.productionStage || 'in_kettle',
     };
     setOrders((prev) => prev.map((o) => (o.id === orderId ? updatedOrder : o)));
@@ -2529,7 +2578,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Automatically trigger Made-to-Order kitchen batches if not already triggered
     const existingBatches = productionBatches.filter((b) => b.targetOrderId === orderId);
     if (existingBatches.length === 0) {
-      produceForOrder(orderId);
+      produceForOrder(orderId, undefined, undefined, allowAdminOverride);
     }
 
     // Increment branch inventory

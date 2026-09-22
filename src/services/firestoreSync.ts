@@ -11,7 +11,7 @@ import {
   where,
   Query,
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, isFirebaseConfigured } from '../lib/firebase';
 import {
   UserModel,
   Branch,
@@ -144,6 +144,10 @@ export class FirestoreSyncService {
     onPhysicalAudits?: (audits: PhysicalInventoryAudit[]) => void;
   }, scope: SyncScope): () => void {
     this.cleanup();
+    if (!isFirebaseConfigured) {
+      this.updateState({ status: 'offline', lastSyncedAt: new Date() });
+      return () => {};
+    }
     this.updateState({ status: 'syncing' });
 
     const scopedCollection = (collectionName: string): Query => {
@@ -458,13 +462,16 @@ export class FirestoreSyncService {
 
   // Generic Save Document to Firestore
   public async saveDoc(collectionName: string, id: string, data: any): Promise<void> {
+    if (data?.clientRequestId) {
+      this.processedRequestKeys.add(data.clientRequestId);
+    }
+    if (data?.idempotencyKey) {
+      this.processedRequestKeys.add(data.idempotencyKey);
+    }
+    if (!isFirebaseConfigured) {
+      return;
+    }
     try {
-      if (data?.clientRequestId) {
-        this.processedRequestKeys.add(data.clientRequestId);
-      }
-      if (data?.idempotencyKey) {
-        this.processedRequestKeys.add(data.idempotencyKey);
-      }
       const sanitized = sanitizeForFirestore(data);
       const ref = doc(db, collectionName, id);
       await setDoc(ref, { ...sanitized, updatedAt: serverTimestamp() }, { merge: true });
@@ -480,6 +487,9 @@ export class FirestoreSyncService {
 
   // Generic Delete Document
   public async removeDoc(collectionName: string, id: string): Promise<void> {
+    if (!isFirebaseConfigured) {
+      return;
+    }
     try {
       const ref = doc(db, collectionName, id);
       await deleteDoc(ref);
@@ -510,6 +520,9 @@ export class FirestoreSyncService {
     branchStatusHistory?: BranchStatusHistory[];
     branchAuditLogs?: BranchAuditLog[];
   }): Promise<void> {
+    if (!isFirebaseConfigured) {
+      return;
+    }
     try {
       const branchesSnap = await getDocs(collection(db, 'branches'));
       if (!branchesSnap.empty) {
