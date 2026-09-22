@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
+import { ListSkeletonItem, EmptyStateBanner } from '../common/SkeletonLoaders';
 import { Order, ProductionStage, DigitalPaymentMethod, PaymentGatewayStatus } from '../../types';
 import {
   ShoppingBag,
@@ -131,6 +132,7 @@ export const BranchOrders: React.FC = () => {
     getDetailedDemandAnalyticsForBranch,
     deliveries,
     themeMode,
+    syncState,
   } = useData();
 
   const [selectedTierId, setSelectedTierId] = useState<'silver' | 'gold' | 'platinum'>('gold');
@@ -929,14 +931,19 @@ export const BranchOrders: React.FC = () => {
           </div>
         </div>
 
-        {filteredAndSortedOrders.length === 0 ? (
-          <div className={`p-10 text-center rounded-3xl border ${
-            isDark ? 'bg-[#161616] border-neutral-800' : 'bg-white border-neutral-200'
-          }`}>
-            <ShoppingBag className="w-10 h-10 text-neutral-400 mx-auto mb-2 opacity-60" />
-            <p className="text-sm font-bold">No orders found</p>
-            <p className="text-xs text-neutral-400 mt-0.5">No requisitions match your search or filter criteria.</p>
-          </div>
+        {syncState?.status === 'syncing' ? (
+          <>
+            <ListSkeletonItem isDark={isDark} />
+            <ListSkeletonItem isDark={isDark} />
+            <ListSkeletonItem isDark={isDark} />
+          </>
+        ) : filteredAndSortedOrders.length === 0 ? (
+          <EmptyStateBanner
+            title="No orders found"
+            message="No requisitions match your search or filter criteria."
+            icon={<ShoppingBag className="w-6 h-6" />}
+            isDark={isDark}
+          />
         ) : (
           filteredAndSortedOrders.map((ord) => {
             const stage = ord.productionStage || 'queued';

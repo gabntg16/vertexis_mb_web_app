@@ -1,5 +1,6 @@
 import React from 'react';
 import { useData } from '../../context/DataContext';
+import { ListSkeletonItem, EmptyStateBanner } from '../common/SkeletonLoaders';
 import {
   TrendingUp,
   Store,
@@ -53,6 +54,7 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
     branchStockCount,
     themeMode,
     currentUser,
+    syncState,
   } = useData();
 
   // MTO Batch Metrics Calculation
@@ -478,10 +480,19 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
             </div>
 
             <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-              {adminRestockInsights.length === 0 ? (
-                <p className="text-xs text-neutral-500 text-center py-8">
-                  All branch inventory levels are currently balanced and adequate.
-                </p>
+              {syncState?.status === 'syncing' ? (
+                <>
+                  <ListSkeletonItem isDark={isDark} />
+                  <ListSkeletonItem isDark={isDark} />
+                  <ListSkeletonItem isDark={isDark} />
+                </>
+              ) : adminRestockInsights.length === 0 ? (
+                <EmptyStateBanner 
+                  title="Inventory Balanced" 
+                  message="All branch inventory levels are currently balanced and adequate. No urgent restocks needed." 
+                  icon={<CheckCircle2 className="w-5 h-5" />} 
+                  isDark={isDark} 
+                />
               ) : (
                 adminRestockInsights.slice(0, 6).map((item, idx) => (
                   <div
@@ -550,7 +561,20 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
             </div>
 
             <div className="space-y-2.5 sm:space-y-3">
-              {recentOrders.map((ord) => (
+              {syncState?.status === 'syncing' ? (
+                <>
+                  <ListSkeletonItem isDark={isDark} />
+                  <ListSkeletonItem isDark={isDark} />
+                  <ListSkeletonItem isDark={isDark} />
+                </>
+              ) : recentOrders.length === 0 ? (
+                <EmptyStateBanner 
+                  title="No Recent Orders" 
+                  message="There are no pending branch requisitions at the moment." 
+                  icon={<Package className="w-5 h-5" />} 
+                  isDark={isDark} 
+                />
+              ) : recentOrders.map((ord) => (
                 <div
                   key={ord.id}
                   onClick={() => onNavigateTab('orders')}

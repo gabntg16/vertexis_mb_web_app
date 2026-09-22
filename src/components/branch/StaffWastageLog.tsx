@@ -220,7 +220,7 @@ export const StaffWastageLog: React.FC<StaffWastageLogProps> = ({ onNavigateTab 
         </div>
       )}
 
-      {/* Role Boundary Notice */}
+      {/* Role Boundary Notice 
       <div className={`p-4 rounded-2xl border ${
         isLocked
           ? 'bg-neutral-100 dark:bg-neutral-900/60 border-neutral-200 dark:border-neutral-800'
@@ -236,13 +236,13 @@ export const StaffWastageLog: React.FC<StaffWastageLogProps> = ({ onNavigateTab 
           </div>
         </div>
       </div>
+      */}
 
       {feedback && (
-        <div className={`p-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center space-x-2 ${
-          feedback.type === 'success'
-            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
-            : 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800'
-        }`}>
+        <div className={`p-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center space-x-2 ${feedback.type === 'success'
+          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
+          : 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800'
+          }`}>
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{feedback.text}</span>
         </div>
@@ -298,11 +298,10 @@ export const StaffWastageLog: React.FC<StaffWastageLogProps> = ({ onNavigateTab 
                 {SPOILAGE_REASONS.map((r) => (
                   <label
                     key={r.label}
-                    className={`flex items-start space-x-2.5 p-2.5 rounded-xl border transition-all cursor-pointer ${
-                      selectedReason === r.label
-                        ? 'border-[#80C7F2] bg-[#80C7F2]/10 text-neutral-900 dark:text-white font-semibold'
-                        : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-850 text-neutral-600 dark:text-neutral-400'
-                    }`}
+                    className={`flex items-start space-x-2.5 p-2.5 rounded-xl border transition-all cursor-pointer ${selectedReason === r.label
+                      ? 'border-[#80C7F2] bg-[#80C7F2]/10 text-neutral-900 dark:text-white font-semibold'
+                      : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-850 text-neutral-600 dark:text-neutral-400'
+                      }`}
                   >
                     <input
                       type="radio"
@@ -342,11 +341,10 @@ export const StaffWastageLog: React.FC<StaffWastageLogProps> = ({ onNavigateTab 
             <button
               type="submit"
               disabled={!isEditable}
-              className={`w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white shadow-sm transition-all ${
-                isEditable
-                  ? 'bg-red-600 hover:bg-red-700 active:scale-98 cursor-pointer'
-                  : 'opacity-50 cursor-not-allowed bg-neutral-400 dark:bg-neutral-700'
-              }`}
+              className={`w-full flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white shadow-sm transition-all ${isEditable
+                ? 'bg-red-600 hover:bg-red-700 active:scale-98 cursor-pointer'
+                : 'opacity-50 cursor-not-allowed bg-neutral-400 dark:bg-neutral-700'
+                }`}
             >
               <Plus className="w-4 h-4" />
               <span>Log Spoilage Entry</span>
@@ -433,7 +431,7 @@ export const StaffWastageLog: React.FC<StaffWastageLogProps> = ({ onNavigateTab 
             )}
           </div>
 
-          {/* Shift Summary Navigation Notice (Submissions centralized in Shift Summary) */}
+          {/* Shift Summary Navigation Notice (Submissions centralized in Shift Summary) 
           <div className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-start space-x-2.5">
               <FileCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
@@ -455,6 +453,7 @@ export const StaffWastageLog: React.FC<StaffWastageLogProps> = ({ onNavigateTab 
               </button>
             )}
           </div>
+          */}
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
+import { ListSkeletonItem, EmptyStateBanner } from '../common/SkeletonLoaders';
 import { Order, OrderStatus, DispatchMethod } from '../../types';
 import {
   ShoppingBag,
@@ -45,9 +46,10 @@ export const AdminOrders: React.FC = () => {
     createDelivery,
     deliveries,
     themeMode,
+    syncState,
   } = useData();
 
-  const [activeMainSubTab, setActiveMainSubTab] = useState<'requisitions' | 'payments'>('payments');
+  const [activeMainSubTab, setActiveMainSubTab] = useState<'requisitions' | 'payments'>('requisitions');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'branch_asc' | 'amount_desc' | 'amount_asc' | 'status'>('date_desc');
@@ -225,7 +227,7 @@ export const AdminOrders: React.FC = () => {
         sender: {
           companyName: 'The Marsh Bites Enterprise (Central Commissary)',
           hubName: 'Legazpi Central Commissary Hub',
-          address: 'Legazpi City, Albay',
+          address: 'Zone 4, Cabangan West, Legazpi City, Albay',
           contactPerson: 'Commissary Logistics Officer',
           phone: '+63 917 555 6274',
         },
@@ -280,7 +282,7 @@ export const AdminOrders: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveMainSubTab('requisitions')}
-          className={`order-2 px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
+          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
             activeMainSubTab === 'requisitions'
               ? 'bg-[#F37021] text-white shadow-xs'
               : isDark
@@ -295,7 +297,7 @@ export const AdminOrders: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveMainSubTab('payments')}
-          className={`order-1 px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
+          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
             activeMainSubTab === 'payments'
               ? 'bg-[#F37021] text-white shadow-xs'
               : isDark
@@ -448,14 +450,20 @@ export const AdminOrders: React.FC = () => {
 
       {/* Orders List */}
       <div className="space-y-3">
-        {filteredOrders.length === 0 ? (
-          <div className={`p-12 text-center rounded-3xl border ${
-            isDark ? 'bg-[#161616] border-neutral-800' : 'bg-white border-neutral-200'
-          }`}>
-            <ShoppingBag className="w-12 h-12 text-neutral-400 mx-auto mb-3 opacity-60" />
-            <p className="text-sm font-bold">No orders found</p>
-            <p className="text-xs text-neutral-500 mt-1">Try selecting a different filter or search keyword.</p>
-          </div>
+        {syncState?.status === 'syncing' ? (
+          <>
+            <ListSkeletonItem isDark={isDark} />
+            <ListSkeletonItem isDark={isDark} />
+            <ListSkeletonItem isDark={isDark} />
+            <ListSkeletonItem isDark={isDark} />
+          </>
+        ) : filteredOrders.length === 0 ? (
+          <EmptyStateBanner
+            title="No orders found"
+            message="Try selecting a different filter or search keyword."
+            icon={<ShoppingBag className="w-6 h-6" />}
+            isDark={isDark}
+          />
         ) : (
           filteredOrders.map((ord) => {
             const hasDelivery = deliveries.some((d) => d.orderId === ord.id);

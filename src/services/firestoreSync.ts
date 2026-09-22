@@ -471,9 +471,10 @@ export class FirestoreSyncService {
       this.updateState({ status: 'connected', lastSyncedAt: new Date() });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.warn(`[Firestore] Sync failed for ${collectionName}/${id}:`, message);
+      console.warn(`[Firestore] Sync failed for ${collectionName}/${id} (Operating in Offline/Demo Mode):`, message);
       this.updateState({ status: 'error', error: message });
-      throw err;
+      // Graceful fallback: do not throw to prevent unhandled promise rejections.
+      // Local optimistic state in DataContext will persist for demo purposes.
     }
   }
 
@@ -485,9 +486,9 @@ export class FirestoreSyncService {
       this.updateState({ status: 'connected', lastSyncedAt: new Date() });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.warn(`[Firestore] Delete failed for ${collectionName}/${id}:`, message);
+      console.warn(`[Firestore] Delete failed for ${collectionName}/${id} (Operating in Offline/Demo Mode):`, message);
       this.updateState({ status: 'error', error: message });
-      throw err;
+      // Graceful fallback: do not throw.
     }
   }
 

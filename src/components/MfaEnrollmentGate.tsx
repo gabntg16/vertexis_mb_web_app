@@ -54,6 +54,8 @@ export const MfaEnrollmentGate: React.FC = () => {
       void user.reload().then(() => {
         setEmailVerified(user.emailVerified);
         setIsEnrolled(multiFactor(user).enrolledFactors.length > 0);
+      }).catch((err) => {
+        console.error('[MFA enrollment] Failed to reload user:', err);
       });
     }
 

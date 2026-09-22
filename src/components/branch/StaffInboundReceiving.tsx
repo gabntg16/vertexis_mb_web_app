@@ -142,8 +142,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
       (delivery.courierName && delivery.courierName.toLowerCase().includes('j&t'));
     setSupplierOrSource('Legazpi Central Commissary Hub');
     setCourierNotes(
-      `${isJT ? 'Courier: J&T Express' : 'Courier: ' + (delivery.courierName || 'In-House Fleet')} • Waybill: ${
-        trackingNo || 'N/A'
+      `${isJT ? 'Courier: J&T Express' : 'Courier: ' + (delivery.courierName || 'In-House Fleet')} • Waybill: ${trackingNo || 'N/A'
       } • Thermal tamper seal intact`
     );
 
@@ -151,8 +150,8 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
     const itemsToLoad = ord?.dispatchedProducts?.length
       ? ord.dispatchedProducts
       : ord?.items?.length
-      ? ord.items
-      : null;
+        ? ord.items
+        : null;
 
     if (itemsToLoad && itemsToLoad.length > 0) {
       const newLines: ManifestLineItem[] = itemsToLoad.map((it: any, idx: number) => {
@@ -433,15 +432,15 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
       newLines.length > 0
         ? newLines
         : [
-            {
-              id: `line-${Date.now()}`,
-              productId: marshmallowProducts[0]?.id || 'p1',
-              expectedUnits: 20,
-              receivedUnits: 20,
-              condition: 'good',
-              notes: '',
-            },
-          ]
+          {
+            id: `line-${Date.now()}`,
+            productId: marshmallowProducts[0]?.id || 'p1',
+            expectedUnits: 20,
+            receivedUnits: 20,
+            condition: 'good',
+            notes: '',
+          },
+        ]
     );
     setManifestToDelete(null);
     setFeedback({
@@ -548,7 +547,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
         </div>
       )}
 
-      {/* Protocol Banner */}
+      {/* Protocol Banner 
       <div className={`p-4 rounded-2xl border ${
         isLocked
           ? 'bg-neutral-100 dark:bg-neutral-900/60 border-neutral-200 dark:border-neutral-800'
@@ -564,15 +563,15 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
           </div>
         </div>
       </div>
+      */}
 
       {feedback && (
-        <div className={`p-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center space-x-2 ${
-          feedback.type === 'success'
+        <div className={`p-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center space-x-2 ${feedback.type === 'success'
             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
             : feedback.type === 'info'
-            ? 'bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800'
-            : 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800'
-        }`}>
+              ? 'bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800'
+              : 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800'
+          }`}>
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{feedback.text}</span>
         </div>
@@ -640,11 +639,10 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                     <div className="space-y-1.5">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                            del.dispatchMethod === 'company_driver'
+                          className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${del.dispatchMethod === 'company_driver'
                               ? 'bg-[#F37021] text-white'
                               : 'bg-sky-600 text-white'
-                          }`}
+                            }`}
                         >
                           {del.dispatchMethod === 'company_driver' ? 'IN-HOUSE FLEET' : del.courierName || 'COURIER'}
                         </span>
@@ -707,11 +705,10 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                       type="button"
                       disabled={!isEditable}
                       onClick={() => handleSelectIncomingShipment(del)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 ${
-                        isEditable
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 ${isEditable
                           ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer active:scale-98'
                           : 'opacity-50 cursor-not-allowed bg-neutral-200 text-neutral-500'
-                      }`}
+                        }`}
                     >
                       <PackageCheck className="w-3.5 h-3.5" />
                       <span>Receive / Pre-fill Form</span>
@@ -814,11 +811,10 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                     type="button"
                     onClick={handlePopulateAllFlavors}
                     disabled={!isEditable}
-                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all ${
-                      isEditable
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all ${isEditable
                         ? 'border-[#80C7F2] text-[#0369a1] dark:text-[#80C7F2] bg-[#80C7F2]/10 hover:bg-[#80C7F2]/20 cursor-pointer'
                         : 'opacity-50 cursor-not-allowed border-neutral-300 dark:border-neutral-700'
-                    }`}
+                      }`}
                   >
                     Quick Add All Flavors
                   </button>
@@ -827,11 +823,10 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                     type="button"
                     onClick={handleAddLine}
                     disabled={!isEditable}
-                    className={`flex items-center space-x-1 px-3 py-1 text-xs font-bold rounded-lg text-white transition-all ${
-                      isEditable
+                    className={`flex items-center space-x-1 px-3 py-1 text-xs font-bold rounded-lg text-white transition-all ${isEditable
                         ? 'bg-emerald-600 hover:bg-emerald-700 active:scale-98 cursor-pointer'
                         : 'opacity-50 cursor-not-allowed bg-neutral-400'
-                    }`}
+                      }`}
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Item</span>
@@ -914,13 +909,12 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                             onChange={(e) =>
                               handleUpdateLine(line.id, 'receivedUnits', parseInt(e.target.value) || 0)
                             }
-                            className={`w-full px-2.5 py-1.5 font-mono font-bold rounded-lg border bg-white dark:bg-[#121212] ${
-                              diff === 0
+                            className={`w-full px-2.5 py-1.5 font-mono font-bold rounded-lg border bg-white dark:bg-[#121212] ${diff === 0
                                 ? 'border-neutral-300 dark:border-neutral-700 text-neutral-900 dark:text-white'
                                 : diff < 0
-                                ? 'border-rose-400 text-rose-600 dark:text-rose-400'
-                                : 'border-emerald-400 text-emerald-600 dark:text-emerald-400'
-                            }`}
+                                  ? 'border-rose-400 text-rose-600 dark:text-rose-400'
+                                  : 'border-emerald-400 text-emerald-600 dark:text-emerald-400'
+                              }`}
                           />
                         </div>
 
@@ -1036,11 +1030,10 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
             <button
               type="submit"
               disabled={!isEditable}
-              className={`w-full flex items-center justify-center space-x-2 px-5 py-3 rounded-xl text-xs sm:text-sm font-bold text-white shadow-sm transition-all ${
-                isEditable
+              className={`w-full flex items-center justify-center space-x-2 px-5 py-3 rounded-xl text-xs sm:text-sm font-bold text-white shadow-sm transition-all ${isEditable
                   ? 'bg-emerald-600 hover:bg-emerald-700 active:scale-98 cursor-pointer'
                   : 'opacity-50 cursor-not-allowed bg-neutral-400 dark:bg-neutral-700'
-              }`}
+                }`}
             >
               <PackageCheck className="w-4 h-4" />
               <span>Verify & Record Entire Manifest ({manifestSummary.totalReceived} Packs)</span>
@@ -1136,11 +1129,10 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                                 {it.receivedUnits} / {it.expectedUnits}
                               </span>
                               <span
-                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                                  it.condition === 'good'
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${it.condition === 'good'
                                     ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
                                     : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
-                                }`}
+                                  }`}
                               >
                                 {it.condition.toUpperCase()}
                               </span>
@@ -1165,7 +1157,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
             )}
           </div>
 
-          {/* Shift Summary Navigation Notice (Submissions centralized in Shift Summary) */}
+          {/* Shift Summary Navigation Notice (Submissions centralized in Shift Summary) 
           <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-start space-x-2.5">
               <FileCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
@@ -1186,7 +1178,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
-          </div>
+          </div>*/}
         </div>
       </div>
 
@@ -1283,13 +1275,12 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                           </div>
                         </div>
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            line.condition === 'good'
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${line.condition === 'good'
                               ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
                               : line.condition === 'damaged'
-                              ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
-                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
-                          }`}
+                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
+                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
+                            }`}
                         >
                           {line.condition.toUpperCase()}
                         </span>
