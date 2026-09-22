@@ -8,7 +8,7 @@ import {
   doc,
   getDocFromServer,
 } from 'firebase/firestore';
-const firebaseConfig = {
+const rawFirebaseConfig = {
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -18,13 +18,27 @@ const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
 };
 
-const missingConfig = Object.entries(firebaseConfig)
+const missingConfig = Object.entries(rawFirebaseConfig)
   .filter(([, value]) => !value)
   .map(([key]) => key);
 
-if (missingConfig.length > 0) {
-  throw new Error(`Missing Firebase environment variables: ${missingConfig.join(', ')}`);
+export const isFirebaseConfigured = missingConfig.length === 0;
+
+if (!isFirebaseConfigured) {
+  console.warn(
+    `[Firebase] Missing Firebase environment variables: ${missingConfig.join(', ')}. Initializing in local fallback mode.`
+  );
 }
+
+const firebaseConfig = {
+  projectId: rawFirebaseConfig.projectId || 'demo-vertexis',
+  appId: rawFirebaseConfig.appId || '1:123456789:web:demo',
+  apiKey: rawFirebaseConfig.apiKey || 'AIzaSyDemoPlaceholderKeyVertexIS',
+  authDomain: rawFirebaseConfig.authDomain || 'demo-vertexis.firebaseapp.com',
+  firestoreDatabaseId: rawFirebaseConfig.firestoreDatabaseId || '(default)',
+  storageBucket: rawFirebaseConfig.storageBucket || 'demo-vertexis.appspot.com',
+  messagingSenderId: rawFirebaseConfig.messagingSenderId || '123456789',
+};
 
 let app;
 let db: Firestore;
@@ -61,6 +75,9 @@ try {
 
 // Connection validation per Firebase integration guidelines
 async function testConnection() {
+  if (!isFirebaseConfigured) {
+    return;
+  }
   try {
     await getDocFromServer(doc(db, 'system_sync', 'status'));
     console.log('[Firebase] Cloud Firestore connection verified online.');

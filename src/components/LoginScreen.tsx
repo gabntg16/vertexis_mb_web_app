@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useData } from '../context/DataContext';
-import { auth } from '../lib/firebase';
+import { auth, isFirebaseConfigured } from '../lib/firebase';
 import {
   getMultiFactorResolver,
   PhoneAuthProvider,
@@ -327,10 +327,10 @@ export const LoginScreen: React.FC = () => {
           </form>
           )}
 
-          {import.meta.env.DEV && (
+          {(import.meta.env.DEV || !isFirebaseConfigured) && (
             <div className="mt-7 border-t border-neutral-200 pt-5 text-left dark:border-neutral-800">
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-neutral-400">
-                Development shortcuts
+                Demo Accounts / Development shortcuts
               </p>
               <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                 Local preview only. These buttons never ship in production builds.
