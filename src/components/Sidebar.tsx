@@ -23,7 +23,6 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  Users,
   Tag,
   ArrowLeftRight,
 } from 'lucide-react';
@@ -176,7 +175,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badgeColor: 'bg-emerald-500 text-white',
     },
     { id: 'announcements', label: 'Announcements', icon: Megaphone },
-    { id: 'user_management', label: 'User Management', icon: Users },
   ];
 
   // Super Admin secondary operations are rendered in their dedicated
@@ -285,7 +283,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Current signed-in user and RBAC scope */}
-      <div className="px-3 pt-3 pb-1">
+      <div id="tour-user-badge" className="px-3 pt-3 pb-1">
         <div className="relative">
           <div
             id="current-user-card"
@@ -324,7 +322,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Navigation List */}
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar-thin">
+      <div id="tour-sidebar-nav" className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar-thin">
         {(!isCollapsed || isMobileOpen) && (
           <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 px-3 py-1.5">
             {isStaff

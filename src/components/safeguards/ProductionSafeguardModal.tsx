@@ -126,11 +126,11 @@ export const ProductionSafeguardModal: React.FC<ProductionSafeguardModalProps> =
   const getBadge = () => {
     switch (type) {
       case 'cook_batch':
-        return { label: 'Commissary Batch Initiation', bg: 'bg-[#F37021]/15 text-[#F37021] border-[#F37021]/30' };
+        return { label: 'Commissary Batch Production', bg: 'bg-[#F37021]/15 text-[#F37021] border-[#F37021]/30' };
       case 'allocate_stock':
-        return { label: 'Branch Inventory Allocation', bg: 'bg-[#80C7F2]/15 text-[#0369a1] dark:text-[#80C7F2] border-[#80C7F2]/30' };
+        return { label: 'Branch Inventory Transfer', bg: 'bg-[#80C7F2]/15 text-[#0369a1] dark:text-[#80C7F2] border-[#80C7F2]/30' };
       case 'send_to_kitchen':
-        return { label: 'MTO Production Pipeline', bg: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30' };
+        return { label: 'Production Dispatch Pipeline', bg: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30' };
       case 'advance_stage':
         return { label: 'Action Confirmation Alert', bg: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30' };
       case 'delete_product':
@@ -144,13 +144,13 @@ export const ProductionSafeguardModal: React.FC<ProductionSafeguardModalProps> =
     if (title) return title;
     switch (type) {
       case 'cook_batch':
-        return 'Initiate Kettle Whip & Curing Run?';
+        return 'Initiate Production Batch Run?';
       case 'allocate_stock':
         return 'Confirm Branch Stock Transfer?';
       case 'send_to_kitchen':
-        return 'Send Requisition to Live Stoves?';
+        return 'Dispatch Requisition to Production?';
       case 'advance_stage':
-        return `Advance Batch to ${toStage || 'Next Stage'}?`;
+        return `Advance Requisition to ${toStage || 'Next Stage'}?`;
       case 'delete_product':
         return 'Delete Gourmet Flavor from Catalog?';
       default:
@@ -268,7 +268,7 @@ export const ProductionSafeguardModal: React.FC<ProductionSafeguardModalProps> =
 
           {batchCode && (
             <div className="flex items-center justify-between">
-              <span className="text-neutral-500 font-medium">Batch Tracking Code:</span>
+              <span className="text-neutral-500 font-medium">Production Lot Code:</span>
               <span className="font-mono font-bold text-[#80C7F2]">{batchCode}</span>
             </div>
           )}
@@ -313,7 +313,7 @@ export const ProductionSafeguardModal: React.FC<ProductionSafeguardModalProps> =
           <div className="leading-snug">
             {type === 'cook_batch' && (
               <p>
-                <strong>Commissary Verification:</strong> Initiating this batch will commit syrup ingredients, dedicate starch slab trays, and broadcast this batch code across the live kitchen tracker.
+                <strong>Commissary Verification:</strong> Initiating this batch will commit ingredients, dedicate production trays, and register this batch code across the production tracker.
               </p>
             )}
             {type === 'allocate_stock' && (
@@ -323,7 +323,7 @@ export const ProductionSafeguardModal: React.FC<ProductionSafeguardModalProps> =
             )}
             {type === 'send_to_kitchen' && (
               <p>
-                <strong>Production Order Dispatch:</strong> This order will be queued directly for live kettle boiling and whipping at the Bicol kitchen.
+                <strong>Production Order Dispatch:</strong> This order will be queued directly for commissary production and packaging fulfillment.
               </p>
             )}
             {type === 'advance_stage' && (
@@ -334,7 +334,7 @@ export const ProductionSafeguardModal: React.FC<ProductionSafeguardModalProps> =
                   </>
                 ) : (
                   <>
-                    <strong>Batch Workflow Advance:</strong> Verify that quality inspection and curing thresholds have been satisfied before moving to the next stage.
+                    <strong>Production Workflow Advance:</strong> Verify that quality inspection and processing thresholds have been satisfied before moving to the next stage.
                   </>
                 )}
               </p>

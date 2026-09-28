@@ -4928,9 +4928,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
 
-      const inProductionUnits = productionBatches
-        .filter((b) => b.productId === prod.id && b.stage !== 'completed')
-        .reduce((sum, b) => sum + b.quantity, 0);
+      // Count units in active production from branch requisitions currently being processed
+      const ordersInProduction = activeOrders.filter(
+        (o) => o.productionStage === 'in_kettle' || o.productionStage === 'curing' || o.productionStage === 'packaging'
+      );
+      const inProductionUnits = ordersInProduction.reduce((sum, o) => {
+        const item = o.items.find((i) => i.productId === prod.id);
+        return sum + (item ? item.quantity : 0);
+      }, 0);
 
       return {
         productId: prod.id,
@@ -4943,7 +4948,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         affectedBranchCount: branchSet.size,
       };
     });
-  }, [products, orders, productionBatches]);
+  }, [products, orders]);
 
   const totalRevenue = useMemo(() => sales.reduce((sum, s) => sum + s.total, 0), [sales]);
   const pendingOrdersCount = useMemo(

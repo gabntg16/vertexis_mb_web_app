@@ -20,7 +20,6 @@ const AdminSalesHistory = lazyNamed(() => import('./components/admin/AdminSalesH
 const AdminCalendar = lazyNamed(() => import('./components/admin/AdminCalendar'), 'AdminCalendar');
 const AdminAnnouncements = lazyNamed(() => import('./components/admin/AdminAnnouncements'), 'AdminAnnouncements');
 const AdminProductPricing = lazyNamed(() => import('./components/admin/AdminProductPricing'), 'AdminProductPricing');
-const AdminUserManagement = lazyNamed(() => import('./components/admin/AdminUserManagement'), 'AdminUserManagement');
 const ManagerLogValidation = lazyNamed(() => import('./components/branch/ManagerLogValidation'), 'ManagerLogValidation');
 const ManagerRequisitions = lazyNamed(() => import('./components/branch/ManagerRequisitions'), 'ManagerRequisitions');
 const ManagerBranchAnalytics = lazyNamed(() => import('./components/branch/ManagerBranchAnalytics'), 'ManagerBranchAnalytics');
@@ -72,7 +71,6 @@ const MainShell: React.FC = () => {
           'sales',
           'calendar',
           'announcements',
-          'user_management',
           'account_settings',
           'privacy_settings',
           'legal_terms',
@@ -123,7 +121,9 @@ const MainShell: React.FC = () => {
           {/* TIER 1: BRANCH_STAFF (Frontline Ground Operations) */}
           {isStaff && (
             <>
-              {activeTab === 'staff_dashboard' && <StaffDashboard onNavigateTab={setActiveTab} />}
+              {activeTab === 'staff_dashboard' && (
+                <StaffDashboard onNavigateTab={setActiveTab} />
+              )}
               {activeTab === 'physical_counts' && <StaffPhysicalCounts onNavigateTab={setActiveTab} />}
               {activeTab === 'manual_sales' && <StaffManualSales onNavigateTab={setActiveTab} />}
               {(activeTab === 'spoilage_wastage' || activeTab === 'wastage') && (
@@ -200,7 +200,6 @@ const MainShell: React.FC = () => {
               {activeTab === 'sales' && <AdminSalesHistory />}
               {activeTab === 'calendar' && <AdminCalendar />}
               {activeTab === 'announcements' && <AdminAnnouncements />}
-              {activeTab === 'user_management' && <AdminUserManagement />}
               {['account_settings', 'privacy_settings', 'legal_terms'].includes(activeTab) && (
                 <SettingsPage section={activeTab as 'account_settings' | 'privacy_settings' | 'legal_terms'} onNavigateTab={setActiveTab} />
               )}
@@ -221,7 +220,6 @@ const MainShell: React.FC = () => {
                 'sales',
                 'calendar',
                 'announcements',
-                'user_management',
                 'account_settings',
                 'privacy_settings',
                 'legal_terms',
@@ -243,10 +241,9 @@ const MainShell: React.FC = () => {
           </div>
         </footer>
       </div>
-
-      </div>
-    </>
-  );
+    </div>
+  </>
+);
 };
 
 export function App() {

@@ -309,7 +309,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             </button>
 
             {/* Title & Context */}
-            <div className="flex items-center space-x-2.5 min-w-0">
+            <div id="tour-brand-logo" className="flex items-center space-x-2.5 min-w-0">
               <div className="hidden sm:flex w-9 h-9 rounded-xl bg-[#80C7F2]/15 text-[#0369a1] dark:text-[#80C7F2] items-center justify-center shrink-0 border border-[#80C7F2]/30">
                 <TabIcon className="w-4 h-4" />
               </div>

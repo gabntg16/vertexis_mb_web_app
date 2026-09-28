@@ -78,43 +78,43 @@ export function calculatePackagePrice(tier: PackageTier, totalPacks: number): {
 
 const STAGE_CONFIG: Record<ProductionStage, { label: string; icon: React.FC<{ className?: string }>; color: string; bg: string }> = {
   queued: {
-    label: '1. Queued for Kitchen Batching',
+    label: '1. Queued',
     icon: Clock,
     color: 'text-amber-600 dark:text-amber-400',
     bg: 'bg-amber-500/10 border-amber-500/30',
   },
   in_kettle: {
-    label: '2. Kettle, Whip & Curing',
-    icon: Flame,
+    label: '2. In-Kitchen',
+    icon: Layers,
     color: 'text-orange-600 dark:text-orange-400',
     bg: 'bg-orange-500/10 border-orange-500/30',
   },
   curing: {
-    label: '2. Kettle, Whip & Curing',
-    icon: Snowflake,
+    label: '2. In-Kitchen',
+    icon: Layers,
     color: 'text-sky-600 dark:text-sky-400',
     bg: 'bg-sky-500/10 border-sky-500/30',
   },
   in_production: {
-    label: '2. Kettle, Whip & Curing',
-    icon: Flame,
+    label: '2. In-Kitchen',
+    icon: Layers,
     color: 'text-orange-600 dark:text-orange-400',
     bg: 'bg-orange-500/10 border-orange-500/30',
   },
   packaging: {
-    label: '3. Packaging & QC Inspected',
+    label: '3. Packed & QC',
     icon: Box,
     color: 'text-purple-600 dark:text-purple-400',
     bg: 'bg-purple-500/10 border-purple-500/30',
   },
   packaged: {
-    label: '3. Packaging & QC Inspected',
+    label: '3. Packed & QC',
     icon: Box,
     color: 'text-purple-600 dark:text-purple-400',
     bg: 'bg-purple-500/10 border-purple-500/30',
   },
   ready_for_dispatch: {
-    label: '4. Ready for Courier Dispatch',
+    label: '4. Ready',
     icon: Truck,
     color: 'text-emerald-600 dark:text-emerald-400',
     bg: 'bg-emerald-500/10 border-emerald-500/30',
@@ -423,15 +423,19 @@ export const BranchOrders: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-black tracking-tight">Commissary Package Requisitions</h1>
-        <p className="text-xs text-neutral-500 font-medium">
-          Order fresh gourmet marshmallow packages handmade at Central Bicol Commissary.
-        </p>
+      <div id="requisition-tour-header" className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center space-x-2">
+            <h1 className="text-2xl font-black tracking-tight">Commissary Package Requisitions</h1>
+          </div>
+          <p className="text-xs text-neutral-500 font-medium">
+            Order fresh gourmet marshmallow packages handmade at Central Bicol Commissary.
+          </p>
+        </div>
       </div>
 
       {/* Package Order Quick-Select Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div id="requisition-tour-package-tiers" className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {PACKAGE_TIERS.map((tier) => {
           const isSelected = selectedTierId === tier.id;
           return (
@@ -485,13 +489,15 @@ export const BranchOrders: React.FC = () => {
       </div>
 
       {/* Intelligent Package Upgrade / Cost-Optimization Caution Card */}
-      <PackageUpgradeCaution
-        analysis={upgradeAnalysis}
-        isDismissed={isUpgradeCautionDismissed}
-        onUpgrade={handleUpgradeToNextTier}
-        onDismiss={() => setIsUpgradeCautionDismissed(true)}
-        themeMode={themeMode as 'light' | 'dark'}
-      />
+      <div id="requisition-tour-upgrade-caution">
+        <PackageUpgradeCaution
+          analysis={upgradeAnalysis}
+          isDismissed={isUpgradeCautionDismissed}
+          onUpgrade={handleUpgradeToNextTier}
+          onDismiss={() => setIsUpgradeCautionDismissed(true)}
+          themeMode={themeMode as 'light' | 'dark'}
+        />
+      </div>
 
       {orderSuccessMsg && (
         <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center space-x-2">
@@ -502,6 +508,7 @@ export const BranchOrders: React.FC = () => {
 
       {/* Package Flavor Distribution Section */}
       <div
+        id="requisition-tour-flavor-distribution"
         className={`p-6 rounded-3xl border transition-all ${
           isDark
             ? 'bg-neutral-900 border-neutral-800'
@@ -537,6 +544,7 @@ export const BranchOrders: React.FC = () => {
                 Total: {totalPacks} {currentTier.maxCap < 900 ? `/ ${currentTier.maxCap} max packs` : 'packs'}
               </span>
               <button
+                id="requisition-tour-autofill-btn"
                 type="button"
                 onClick={handleAutoFillFromDemand}
                 className="px-2.5 py-1 rounded-xl text-xs font-bold bg-[#F37021]/15 text-[#d85e15] dark:text-[#F37021] hover:bg-[#F37021] hover:text-white transition-all flex items-center space-x-1 cursor-pointer"
@@ -631,7 +639,7 @@ export const BranchOrders: React.FC = () => {
                 </div>
 
                 {/* Stepper Controls with Direct Number Input */}
-                <div className="flex items-center space-x-1.5 shrink-0">
+                <div id={prod.id === products[0]?.id ? 'requisition-tour-qty-controls' : undefined} className="flex items-center space-x-1.5 shrink-0">
                   <button
                     type="button"
                     onClick={() => handleQtyChange(prod.id, -1)}
@@ -668,7 +676,7 @@ export const BranchOrders: React.FC = () => {
         </div>
 
         {/* Sticky Package Order Checkout Bar */}
-        <div className="mt-6 pt-5 border-t border-neutral-200 dark:border-neutral-800 space-y-3">
+        <div id="requisition-tour-checkout-bar" className="mt-6 pt-5 border-t border-neutral-200 dark:border-neutral-800 space-y-3">
           {/* Also show caution here if manager is scrolled down near the checkout action */}
           <PackageUpgradeCaution
             analysis={upgradeAnalysis}
@@ -723,7 +731,7 @@ export const BranchOrders: React.FC = () => {
       </div>
 
       {/* Order Status History Table */}
-      <div className="space-y-4 pt-4">
+      <div id="requisition-tour-history-table" className="space-y-4 pt-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-bold flex items-center space-x-2">
@@ -945,7 +953,7 @@ export const BranchOrders: React.FC = () => {
             isDark={isDark}
           />
         ) : (
-          filteredAndSortedOrders.map((ord) => {
+          filteredAndSortedOrders.map((ord, idx) => {
             const stage = ord.productionStage || 'queued';
             const stageInfo = STAGE_CONFIG[stage] || STAGE_CONFIG.queued;
             const StageIcon = stageInfo.icon;
@@ -953,6 +961,7 @@ export const BranchOrders: React.FC = () => {
             return (
               <div
                 key={ord.id}
+                id={idx === 0 ? 'requisition-tour-proof-tracking' : undefined}
                 className={`p-5 rounded-3xl border transition-all space-y-3.5 ${
                   isDark ? 'bg-[#161616] border-neutral-800' : 'bg-white border-neutral-200 shadow-xs'
                 }`}

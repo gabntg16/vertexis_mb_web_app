@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import { BIRReceipt } from '../../types';
 import { BIRReceiptModal } from '../pos/BIRReceiptModal';
+import { DownloadOrdersModal } from './DownloadOrdersModal';
 import {
   DollarSign,
   Search,
@@ -37,12 +38,13 @@ import {
 } from 'recharts';
 
 export const AdminSalesHistory: React.FC = () => {
-  const { sales, branches, products, birReceipts, shiftClosings, posAuditLogs, themeMode } = useData();
+  const { sales, orders, branches, products, birReceipts, shiftClosings, posAuditLogs, themeMode } = useData();
 
   const [activeTab, setActiveTab] = useState<'analytics' | 'receipts' | 'zreadings' | 'audit'>('analytics');
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeReceiptModal, setActiveReceiptModal] = useState<BIRReceipt | null>(null);
+  const [showDownloadOrdersModal, setShowDownloadOrdersModal] = useState(false);
 
   const isDark = themeMode === 'dark';
 
@@ -217,13 +219,26 @@ export const AdminSalesHistory: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleExportCSV}
-          className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-md transition-all flex items-center space-x-1.5 self-start sm:self-auto"
-        >
-          <FileSpreadsheet className="w-4 h-4" />
-          <span>Export Sales Report</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setShowDownloadOrdersModal(true)}
+            className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-md transition-all flex items-center space-x-1.5 cursor-pointer"
+            title="Download franchise orders spreadsheet (Order ID, Partner Name, Package Type, Amounts, Dates & Status)"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Download Orders Result</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            className="px-3.5 py-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs sm:text-sm font-bold border border-neutral-200 dark:border-neutral-700 shadow-2xs transition-all flex items-center space-x-1.5 cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-sky-500" />
+            <span>Export Sales CSV</span>
+          </button>
+        </div>
       </div>
 
       {/* Financial KPI Summary Cards */}
@@ -643,6 +658,15 @@ export const AdminSalesHistory: React.FC = () => {
           onClose={() => setActiveReceiptModal(null)}
         />
       )}
+
+      {/* Downloadable Orders Result Spreadsheet Modal */}
+      <DownloadOrdersModal
+        isOpen={showDownloadOrdersModal}
+        onClose={() => setShowDownloadOrdersModal(false)}
+        orders={orders}
+        branches={branches}
+        isDark={isDark}
+      />
 
     </div>
   );

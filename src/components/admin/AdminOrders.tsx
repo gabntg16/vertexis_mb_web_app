@@ -23,18 +23,20 @@ import {
   Zap,
   Printer,
   ShieldCheck,
-  CreditCard,
   Package,
   X,
+  Download,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   DispatchManifestData,
   JTShippingLabel,
 } from '../common/JTShippingLabel';
 import { JTTrackingModal } from '../common/JTTrackingModal';
-import { AdminPaymentVerificationQueue } from './AdminPaymentVerificationQueue';
 import { jtExpressService } from '../../services/jtExpress';
 import type { JTShippingLabelData } from '../../services/jtExpress';
+import { DownloadOrdersModal } from './DownloadOrdersModal';
+import { downloadOrdersExcel, downloadOrdersCSV } from '../../utils/orderExportUtils';
 
 export const AdminOrders: React.FC = () => {
   const {
@@ -50,7 +52,6 @@ export const AdminOrders: React.FC = () => {
     syncState,
   } = useData();
 
-  const [activeMainSubTab, setActiveMainSubTab] = useState<'requisitions' | 'payments'>('requisitions');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'branch_asc' | 'amount_desc' | 'amount_asc' | 'status'>('date_desc');
@@ -77,6 +78,7 @@ export const AdminOrders: React.FC = () => {
   const [activeLabelData, setActiveLabelData] = useState<JTShippingLabelData | null>(null);
   const [activeTrackingNumber, setActiveTrackingNumber] = useState<string | null>(null);
   const [activeTrackingOrder, setActiveTrackingOrder] = useState<{ id: string; branch: string } | null>(null);
+  const [showDownloadOrdersModal, setShowDownloadOrdersModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
 
   const isDark = themeMode === 'dark';
@@ -278,52 +280,43 @@ export const AdminOrders: React.FC = () => {
         </div>
       )}
 
-      {/* Main Sub-Tab Switcher */}
-      <div className="flex items-center space-x-2 border-b border-neutral-200 dark:border-neutral-800 pb-3">
-        <button
-          type="button"
-          onClick={() => setActiveMainSubTab('requisitions')}
-          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
-            activeMainSubTab === 'requisitions'
-              ? 'bg-[#F37021] text-white shadow-xs'
-              : isDark
-              ? 'bg-neutral-900 text-neutral-400 hover:text-white'
-              : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
-          }`}
-        >
+      {/* Section Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-200 dark:border-neutral-800 pb-3">
+        <div className="px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-2 bg-[#F37021] text-white shadow-xs self-start">
           <ShoppingBag className="w-4 h-4" />
           <span>Requisitions & Dispatch Management</span>
-        </button>
+        </div>
 
-        <button
-          type="button"
-          onClick={() => setActiveMainSubTab('payments')}
-          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
-            activeMainSubTab === 'payments'
-              ? 'bg-[#F37021] text-white shadow-xs'
-              : isDark
-              ? 'bg-neutral-900 text-neutral-400 hover:text-white'
-              : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
-          }`}
-        >
-          <CreditCard className="w-4 h-4" />
-          <span>Proof of Payment (PoP) Queue</span>
-          {orders.filter((o) => !!o.proofImagePath && o.status === 'waitingApproval').length > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-white text-[#F37021]">
-              {orders.filter((o) => !!o.proofImagePath && o.status === 'waitingApproval').length}
-            </span>
-          )}
-        </button>
+        {/* Action Controls: Downloadable Result */}
+        <div className="flex items-center space-x-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => {
+              const timestamp = new Date().toISOString().split('T')[0];
+              downloadOrdersExcel(filteredOrders, `VertexIS_Orders_Report_${timestamp}.xlsx`);
+              showToast(`Exported ${filteredOrders.length} orders to Excel (.xlsx)`, 'success');
+            }}
+            className="px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center space-x-1.5 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700 cursor-pointer shadow-2xs"
+            title="Quick download filtered orders as Excel (.xlsx)"
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-500" />
+            <span className="hidden sm:inline">Quick .xlsx</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowDownloadOrdersModal(true)}
+            className="px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs hover:shadow-md cursor-pointer"
+            title="Open Downloadable Result Modal with all 14 columns: Order ID, Partner Name, Package Type, Amounts, Dates & Status"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Download Result</span>
+          </button>
+        </div>
       </div>
 
-      {activeMainSubTab === 'payments' ? (
-        <div className="animate-in fade-in duration-200">
-          <AdminPaymentVerificationQueue />
-        </div>
-      ) : (
-        <>
-          {/* Header Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-black tracking-tight">Branch Stock Orders</h1>
               <p className="text-xs text-neutral-500 font-medium">
@@ -1429,8 +1422,15 @@ export const AdminOrders: React.FC = () => {
           onClose={() => setActiveLabelData(null)}
         />
       )}
-        </>
-      )}
+
+      {/* Downloadable Orders Result Spreadsheet Modal */}
+      <DownloadOrdersModal
+        isOpen={showDownloadOrdersModal}
+        onClose={() => setShowDownloadOrdersModal(false)}
+        orders={orders}
+        branches={branches}
+        isDark={isDark}
+      />
     </div>
   );
 };

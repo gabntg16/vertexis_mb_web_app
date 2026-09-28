@@ -32,3 +32,4 @@ export const ManagerRequisitions: React.FC = () => {
     </div>
   );
 };
+

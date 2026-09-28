@@ -13,7 +13,9 @@ import {
 import { useData } from '../../context/DataContext';
 import { DailyLogStatus } from '../../types';
 
-export const StaffDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> = ({ onNavigateTab }) => {
+export const StaffDashboard: React.FC<{
+  onNavigateTab: (tab: string) => void;
+}> = ({ onNavigateTab }) => {
   const { currentUser, currentBranch, dailyShiftLogs, inventory, orders, deliveries, themeMode } = useData();
   const isDark = themeMode === 'dark';
   const branchId = currentUser?.branchId || currentBranch?.id;
@@ -48,24 +50,29 @@ export const StaffDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
     isDark ? 'bg-[#161616] border-neutral-800' : 'bg-white border-neutral-200/80 shadow-xs'
   }`;
   const quickActions = [
-    { id: 'physical_counts', label: 'Record Physical Counts', icon: ClipboardCheck },
-    { id: 'manual_sales', label: 'Enter Manual Sales', icon: Receipt },
-    { id: 'inbound_receiving', label: 'Receive Shipment', icon: PackageCheck },
-    { id: 'shift_summary', label: 'Review Shift Summary', icon: FileCheck },
+    { id: 'physical_counts', label: 'Record Physical Counts', icon: ClipboardCheck, tourId: 'staff-tour-action-counts' },
+    { id: 'manual_sales', label: 'Enter Manual Sales', icon: Receipt, tourId: 'staff-tour-action-sales' },
+    { id: 'inbound_receiving', label: 'Receive Shipment', icon: PackageCheck, tourId: 'staff-tour-action-receiving' },
+    { id: 'shift_summary', label: 'Review Shift Summary', icon: FileCheck, tourId: 'staff-tour-action-shift' },
   ];
 
   return (
     <div className="space-y-6" id="staff-dashboard-view">
-      <div className={`rounded-3xl border p-5 sm:p-7 ${
-        isDark
-          ? 'bg-gradient-to-r from-neutral-900 via-[#132430] to-neutral-900 border-neutral-800'
-          : 'bg-gradient-to-r from-sky-50 via-white to-emerald-50 border-[#80C7F2]/30'
-      }`}>
+      <div
+        id="staff-tour-header"
+        className={`rounded-3xl border p-5 sm:p-7 ${
+          isDark
+            ? 'bg-gradient-to-r from-neutral-900 via-[#132430] to-neutral-900 border-neutral-800'
+            : 'bg-gradient-to-r from-sky-50 via-white to-emerald-50 border-[#80C7F2]/30'
+        }`}
+      >
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
           <div className="min-w-0">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Frontline Operations
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Frontline Operations
+              </div>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight mt-2 text-neutral-900 dark:text-white">
               Good day, {currentUser?.name || 'Team Member'}
@@ -85,29 +92,29 @@ export const StaffDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className={cardClass}>
+        <div id="staff-tour-shift-status" className={cardClass}>
           <div className="flex items-center justify-between text-xs font-semibold text-neutral-500"><span>Shift Status</span><CalendarClock className="w-4 h-4 text-[#F37021]" /></div>
           <p className="mt-2 text-lg font-black text-neutral-900 dark:text-white">{shiftStatusLabel}</p>
           <p className="text-[11px] text-neutral-400 mt-1">{todayLog ? "Today's log is available" : 'Start your daily record'}</p>
         </div>
-        <div className={cardClass}>
+        <div id="staff-tour-skus" className={cardClass}>
           <div className="flex items-center justify-between text-xs font-semibold text-neutral-500"><span>SKUs to Count</span><Boxes className="w-4 h-4 text-sky-500" /></div>
           <p className="mt-2 text-2xl font-black text-neutral-900 dark:text-white">{branchInventory.length}</p>
           <p className="text-[11px] text-neutral-400 mt-1">Current branch assortment</p>
         </div>
-        <div className={cardClass}>
+        <div id="staff-tour-shipments" className={cardClass}>
           <div className="flex items-center justify-between text-xs font-semibold text-neutral-500"><span>Incoming Shipments</span><Truck className="w-4 h-4 text-amber-500" /></div>
           <p className="mt-2 text-2xl font-black text-amber-600 dark:text-amber-400">{incomingDeliveries.length}</p>
           <p className="text-[11px] text-neutral-400 mt-1">Awaiting receiving inspection</p>
         </div>
-        <div className={cardClass}>
+        <div id="staff-tour-requisitions" className={cardClass}>
           <div className="flex items-center justify-between text-xs font-semibold text-neutral-500"><span>Open Requisitions</span><PackageCheck className="w-4 h-4 text-emerald-500" /></div>
           <p className="mt-2 text-2xl font-black text-emerald-600 dark:text-emerald-400">{openOrders.length}</p>
           <p className="text-[11px] text-neutral-400 mt-1">Branch orders in progress</p>
         </div>
       </div>
 
-      <section className={cardClass}>
+      <section id="staff-tour-workbench" className={cardClass}>
         <div className="flex items-center justify-between gap-3 mb-3">
           <div>
             <h2 className="text-base font-bold text-neutral-900 dark:text-white">Today&apos;s Workbench</h2>
@@ -121,9 +128,10 @@ export const StaffDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
             return (
               <button
                 key={action.id}
+                id={action.tourId}
                 type="button"
                 onClick={() => onNavigateTab(action.id)}
-                className="flex items-center justify-between gap-2 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50/80 dark:bg-neutral-900/60 px-3 py-2.5 text-left text-xs font-bold text-neutral-700 dark:text-neutral-200 hover:border-[#80C7F2] hover:bg-[#80C7F2]/10 transition-colors"
+                className="flex items-center justify-between gap-2 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50/80 dark:bg-neutral-900/60 px-3 py-2.5 text-left text-xs font-bold text-neutral-700 dark:text-neutral-200 hover:border-[#80C7F2] hover:bg-[#80C7F2]/10 transition-colors cursor-pointer"
               >
                 <span className="flex items-center gap-2 min-w-0"><Icon className="w-4 h-4 text-[#1a7bb5] shrink-0" /><span className="truncate">{action.label}</span></span>
                 <ArrowRight className="w-3.5 h-3.5 text-neutral-400 shrink-0" />

@@ -46,7 +46,6 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
     products,
     orders,
     sales,
-    productionBatches,
     totalRevenue,
     pendingOrdersCount,
     adminRestockInsights,
@@ -57,10 +56,14 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
     syncState,
   } = useData();
 
-  // MTO Batch Metrics Calculation
-  const inKettleBatches = productionBatches.filter((b) => b.stage === 'in_kettle');
-  const curingBatches = productionBatches.filter((b) => b.stage === 'curing');
-  const packagedBatches = productionBatches.filter((b) => b.stage === 'packaged');
+  // Active Production Requisitions
+  const queuedOrders = orders.filter((o) => o.productionStage === 'queued' && !o.isArchived && o.status !== 'rejected');
+  const inProductionOrders = orders.filter(
+    (o) => (o.productionStage === 'in_kettle' || o.productionStage === 'curing') && !o.isArchived && o.status !== 'rejected'
+  );
+  const packagingOrders = orders.filter(
+    (o) => o.productionStage === 'packaging' && !o.isArchived && o.status !== 'rejected'
+  );
   const readyOrders = orders.filter((o) => o.productionStage === 'ready_for_dispatch' || o.status === 'approved');
 
   // Compute Top Performing Branches by Revenue
@@ -146,7 +149,7 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
               className="px-4 py-2.5 sm:py-3 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-white text-xs sm:text-sm font-bold hover:bg-neutral-50 dark:hover:bg-neutral-700 active:scale-[0.98] transition-all flex items-center justify-center space-x-2 min-h-[44px]"
             >
               <Package className="w-4 h-4 text-[#80C7F2] flex-shrink-0" />
-              <span className="whitespace-nowrap">MTO Kitchen Hub</span>
+              <span className="whitespace-nowrap">Commissary & Production</span>
             </button>
           </div>
         </div>
@@ -188,7 +191,7 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
           </div>
         </div>
 
-        {/* Pillar 2: Central Commissary Batches */}
+        {/* Pillar 2: Central Commissary Production */}
         <div
           id="stat-card-production"
           onClick={() => onNavigateTab('production')}
@@ -198,18 +201,18 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
         >
           <div className="flex items-center justify-between">
             <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-neutral-500 truncate">
-              2. Commissary Batches
+              2. Commissary Production
             </span>
             <div className="p-2 rounded-xl bg-[#F37021]/15 text-[#F37021] group-hover:bg-[#F37021] group-hover:text-white transition-all flex-shrink-0">
-              <Flame className="w-4 h-4" />
+              <Layers className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2.5 sm:mt-3">
             <div className="text-2xl sm:text-3xl font-black truncate">
-              {productionBatches.length} <span className="text-xs font-bold text-neutral-400">Active</span>
+              {inProductionOrders.length + packagingOrders.length} <span className="text-xs font-bold text-neutral-400">Processing</span>
             </div>
             <p className="text-xs text-neutral-500 mt-1 flex items-center justify-between">
-              <span className="truncate">{inKettleBatches.length} Kettle • {curingBatches.length} Curing</span>
+              <span className="truncate">{inProductionOrders.length} In Production • {packagingOrders.length} In Packaging</span>
               <ArrowRight className="w-3.5 h-3.5 text-[#F37021] group-hover:translate-x-1 transition-transform flex-shrink-0 ml-1" />
             </p>
           </div>
@@ -272,7 +275,7 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
 
       {/* 
         ========================================================================
-        3. Central Commissary Made-to-Order Live Pipeline Bar
+        3. Central Commissary Made-to-Order Pipeline Bar
         - Responsive 4-stage progression: 2-col on mobile/tablet, 4-col on desktop
         ========================================================================
       */}
@@ -282,19 +285,19 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-5">
           <div className="flex items-center space-x-3 min-w-0">
             <div className="p-2 sm:p-2.5 rounded-2xl bg-[#F37021]/15 text-[#F37021] border border-[#F37021]/30 flex-shrink-0">
-              <Flame className="w-4 h-4 sm:w-5 sm:h-5" />
+              <Layers className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center space-x-2 flex-wrap">
                 <h2 className="text-sm sm:text-base font-bold truncate">
-                  Central Commissary • Live Made-to-Order Pipeline
+                  Central Commissary • Production Pipeline
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#80C7F2]/20 text-[#1a7bb5] dark:text-[#80C7F2] whitespace-nowrap">
-                  Live Kitchen
+                  Commissary Pipeline
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-neutral-500 truncate mt-0.5">
-                {/*Fresh gourmet marshmallows cooked to order upon branch requisition approval*/}
+                {/*Gourmet marshmallows produced to order upon branch requisition approval*/}
               </p>
             </div>
           </div>
@@ -313,24 +316,24 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
           <div className={`p-3 sm:p-3.5 rounded-xl sm:rounded-2xl border min-w-0 ${isDark ? 'bg-[#202020] border-neutral-800' : 'bg-neutral-50 border-neutral-200'}`}>
             <span className="text-[10px] sm:text-[11px] font-bold text-neutral-400 block mb-1 truncate">Stage 1 • Queued</span>
             <div className="flex items-baseline space-x-1.5 sm:space-x-2 truncate">
-              <span className="text-lg sm:text-xl font-black text-amber-500">{orders.filter(o => o.productionStage === 'queued').length}</span>
+              <span className="text-lg sm:text-xl font-black text-amber-500">{queuedOrders.length}</span>
               <span className="text-[10px] sm:text-xs text-neutral-400 truncate">Requisitions</span>
             </div>
           </div>
 
           <div className={`p-3 sm:p-3.5 rounded-xl sm:rounded-2xl border min-w-0 ${isDark ? 'bg-[#202020] border-neutral-800' : 'bg-neutral-50 border-neutral-200'}`}>
-            <span className="text-[10px] sm:text-[11px] font-bold text-neutral-400 block mb-1 truncate">Stage 2 • In Kettle</span>
+            <span className="text-[10px] sm:text-[11px] font-bold text-neutral-400 block mb-1 truncate">Stage 2 • In-Kitchen</span>
             <div className="flex items-baseline space-x-1.5 sm:space-x-2 truncate">
-              <span className="text-lg sm:text-xl font-black text-[#F37021]">{inKettleBatches.length}</span>
-              <span className="text-[10px] sm:text-xs text-neutral-400 truncate">Batches</span>
+              <span className="text-lg sm:text-xl font-black text-[#F37021]">{inProductionOrders.length}</span>
+              <span className="text-[10px] sm:text-xs text-neutral-400 truncate">Requisitions</span>
             </div>
           </div>
 
           <div className={`p-3 sm:p-3.5 rounded-xl sm:rounded-2xl border min-w-0 ${isDark ? 'bg-[#202020] border-neutral-800' : 'bg-neutral-50 border-neutral-200'}`}>
-            <span className="text-[10px] sm:text-[11px] font-bold text-neutral-400 block mb-1 truncate">Stage 3 • Curing</span>
+            <span className="text-[10px] sm:text-[11px] font-bold text-neutral-400 block mb-1 truncate">Stage 3 • Packed & QC</span>
             <div className="flex items-baseline space-x-1.5 sm:space-x-2 truncate">
-              <span className="text-lg sm:text-xl font-black text-purple-500">{curingBatches.length}</span>
-              <span className="text-[10px] sm:text-xs text-neutral-400 truncate">Resting Pans</span>
+              <span className="text-lg sm:text-xl font-black text-purple-500">{packagingOrders.length}</span>
+              <span className="text-[10px] sm:text-xs text-neutral-400 truncate">Requisitions</span>
             </div>
           </div>
 
@@ -475,7 +478,7 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
                 onClick={() => onNavigateTab('production')}
                 className="text-xs font-bold text-[#F37021] hover:underline whitespace-nowrap"
               >
-                Allocate Stock
+                View Inventory
               </button>
             </div>
 
