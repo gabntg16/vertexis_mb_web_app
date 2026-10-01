@@ -1,3 +1,4 @@
+import { isOrderReadyForDispatch } from '../../utils/dispatchEligibility';
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import {
@@ -128,7 +129,7 @@ export const AdminDispatch: React.FC = () => {
   };
 
   // Execute Dispatch Submission
-  const handleExecuteDispatch = (e: React.FormEvent) => {
+  const handleExecuteDispatch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrderForDispatch) return;
 
@@ -169,7 +170,7 @@ export const AdminDispatch: React.FC = () => {
           : 'third_party_courier';
 
       // Create Delivery in DataContext
-      createDelivery(
+      await createDelivery(
         selectedOrderForDispatch.id,
         receiverAddress,
         finalCourierName,
@@ -291,10 +292,10 @@ export const AdminDispatch: React.FC = () => {
   };
 
   // Cancel Delivery
-  const handleConfirmCancel = () => {
+  const handleConfirmCancel = async () => {
     if (!cancelModalDelivery) return;
     try {
-      cancelDelivery(cancelModalDelivery.id, cancelReason);
+      await cancelDelivery(cancelModalDelivery.id, cancelReason);
       showToast('info', `Shipment ${cancelModalDelivery.trackingNumber || cancelModalDelivery.id} canceled.`);
       setCancelModalDelivery(null);
     } catch (err: any) {
@@ -304,7 +305,7 @@ export const AdminDispatch: React.FC = () => {
 
   // Pending approved orders ready for dispatch
   const pendingDispatchOrders = orders.filter(
-    (o) => (o.status === 'approved' || o.productionStage === 'ready_for_dispatch') && !o.isDispatched
+    (o) => isOrderReadyForDispatch(o, deliveries)
   );
 
   // Filtered Deliveries List
@@ -773,9 +774,9 @@ export const AdminDispatch: React.FC = () => {
                       {del.status === 'inTransit' && (
                         <button
                           type="button"
-                          onClick={() => {
-                            updateDeliveryStatus(del.id, 'delivered');
-                            showToast('success', `Delivery ${trackingNo} marked as Delivered!`);
+                          onClick={async () => {
+                            try { await updateDeliveryStatus(del.id, 'delivered'); showToast('success', 'Delivery marked as arrived. Stock still requires receiving approval.'); }
+                            catch (error) { showToast('error', error instanceof Error ? error.message : 'Delivery was not updated.'); }
                           }}
                           className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
                         >

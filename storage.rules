@@ -1,0 +1,8 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // This web app stores validated payment images behind authenticated callable
+    // Functions in Firestore. No browser Storage upload/read workflow is enabled.
+    match /{path=**} { allow read, write: if false; }
+  }
+}

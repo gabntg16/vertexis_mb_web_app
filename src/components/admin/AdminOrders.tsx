@@ -1,3 +1,5 @@
+import { PaymentProofImage } from '../common/PaymentProofImage';
+import { isOrderReadyForDispatch } from '../../utils/dispatchEligibility';
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { ListSkeletonItem, EmptyStateBanner } from '../common/SkeletonLoaders';
@@ -88,14 +90,7 @@ export const AdminOrders: React.FC = () => {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const readyForDispatchOrders = orders.filter(
-    (o) =>
-      (o.status === 'approved' || (o.productionStage as string) === 'ready_for_dispatch') &&
-      (o.productionStage === 'ready_for_dispatch' || (o.productionStage as string) === 'ready') &&
-      !o.isDispatched &&
-      o.status !== 'completed' &&
-      o.status !== 'rejected'
-  );
+  const readyForDispatchOrders = orders.filter(o => isOrderReadyForDispatch(o, deliveries));
 
   const filteredOrders = orders
     .filter((o) => {
@@ -105,12 +100,7 @@ export const AdminOrders: React.FC = () => {
       } else if (statusFilter === 'active') {
         matchesStatus = !o.isArchived && o.status !== 'completed';
       } else if (statusFilter === 'ready_for_dispatch') {
-        matchesStatus =
-          (o.status === 'approved' || (o.productionStage as string) === 'ready_for_dispatch') &&
-          (o.productionStage === 'ready_for_dispatch' || (o.productionStage as string) === 'ready') &&
-          !o.isDispatched &&
-          o.status !== 'completed' &&
-          o.status !== 'rejected';
+        matchesStatus = isOrderReadyForDispatch(o, deliveries);
       } else if (statusFilter !== 'all') {
         matchesStatus = o.status === statusFilter;
       }
@@ -130,15 +120,11 @@ export const AdminOrders: React.FC = () => {
       return 0;
     });
 
-  const handleConfirmApprove = () => {
+  const handleConfirmApprove = async () => {
     if (!selectedOrder) return;
     try {
-      approveOrder(selectedOrder.id);
-      setSelectedOrder({
-        ...selectedOrder,
-        status: 'approved',
-        productionStage: 'ready_for_dispatch',
-      });
+      await approveOrder(selectedOrder.id);
+      setSelectedOrder(null);
       setShowApproveConfirmModal(false);
       showToast(`Order #${selectedOrder.id} for ${selectedOrder.branchName} approved successfully!`, 'success');
     } catch (err: any) {
@@ -146,20 +132,20 @@ export const AdminOrders: React.FC = () => {
     }
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!selectedOrder) return;
     const deletedId = selectedOrder.id;
     const branchName = selectedOrder.branchName;
-    deleteOrder(deletedId);
+    try { await deleteOrder(deletedId); } catch (error) { showToast(error instanceof Error ? error.message : 'Archive failed', 'error'); return; }
     setShowDeleteConfirmModal(false);
     setSelectedOrder(null);
-    showToast(`Order #${deletedId} for ${branchName} has been deleted.`, 'info');
+    showToast(`Order #${deletedId} for ${branchName} has been archived.`, 'info');
   };
 
-  const handleRejectSubmit = (e: React.FormEvent) => {
+  const handleRejectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrder || !rejectionReason.trim()) return;
-    rejectOrder(selectedOrder.id, rejectionReason.trim());
+    try { await rejectOrder(selectedOrder.id, rejectionReason.trim()); } catch (error) { showToast(error instanceof Error ? error.message : 'Rejection failed', 'error'); return; }
     setSelectedOrder({
       ...selectedOrder,
       status: 'rejected',
@@ -198,7 +184,7 @@ export const AdminOrders: React.FC = () => {
         (isFleet ? `TRIP-NGA-${selectedOrder.id}` : `MB-TRACK-${Date.now().toString().slice(-6)}`);
       const cleanETD = estimatedDeliveryTime.trim();
 
-      createDelivery(
+      await createDelivery(
         selectedOrder.id,
         deliveryAddress,
         finalCourierName,
@@ -325,7 +311,7 @@ export const AdminOrders: React.FC = () => {
             </div>
 
             {/* Filter Badges */}
-            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1">
+            <div role="group" aria-label="Filter orders by status" className="flex flex-wrap items-center gap-2 sm:max-w-[65%]">
               {[
                 { id: 'all', label: 'All Orders' },
                 {
@@ -341,6 +327,8 @@ export const AdminOrders: React.FC = () => {
               ].map((f) => (
                 <button
                   key={f.id}
+                  type="button"
+                  aria-pressed={statusFilter === f.id}
                   onClick={() => setStatusFilter(f.id)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                     statusFilter === f.id
@@ -411,6 +399,7 @@ export const AdminOrders: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by branch name, package or order ID..."
+            aria-label="Search orders by branch, package or order ID"
             className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm border focus:outline-none focus:ring-2 focus:ring-[#80C7F2] ${
               isDark
                 ? 'bg-[#161616] border-neutral-800 text-white placeholder-neutral-500'
@@ -425,6 +414,7 @@ export const AdminOrders: React.FC = () => {
           </div>
           <select
             value={sortBy}
+            aria-label="Sort orders"
             onChange={(e) => setSortBy(e.target.value as any)}
             className={`w-full pl-9 pr-4 py-2.5 rounded-xl text-xs font-bold border focus:outline-none focus:ring-2 focus:ring-[#80C7F2] ${
               isDark
@@ -444,7 +434,7 @@ export const AdminOrders: React.FC = () => {
 
       {/* Orders List */}
       <div className="space-y-3">
-        {syncState?.status === 'syncing' ? (
+        {syncState?.status === 'syncing' && orders.length === 0 ? (
           <>
             <ListSkeletonItem isDark={isDark} />
             <ListSkeletonItem isDark={isDark} />
@@ -698,7 +688,7 @@ export const AdminOrders: React.FC = () => {
                       <span>Proof of Payment Uploaded by Branch</span>
                     </div>
                     <div className="rounded-xl overflow-hidden max-h-52 bg-neutral-950 border border-neutral-700/50 flex items-center justify-center">
-                      <img
+                      <PaymentProofImage
                         src={selectedOrder.proofImagePath}
                         alt="Proof of Payment"
                         className="max-h-52 w-full object-contain"
@@ -738,13 +728,13 @@ export const AdminOrders: React.FC = () => {
                   className="px-3 py-2 rounded-xl text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10 font-bold transition-colors flex items-center space-x-1.5"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>Delete Order</span>
+                  <span>Archive Order</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => {
-                    archiveOrder(selectedOrder.id);
+                  onClick={async () => {
+                    try { await archiveOrder(selectedOrder.id); } catch (error) { showToast(error instanceof Error ? error.message : 'Archive failed', 'error'); return; }
                     setSelectedOrder({ ...selectedOrder, isArchived: !selectedOrder.isArchived });
                     showToast(selectedOrder.isArchived ? `Order #${selectedOrder.id} unarchived` : `Order #${selectedOrder.id} moved to archive`);
                   }}
@@ -944,7 +934,7 @@ export const AdminOrders: React.FC = () => {
                     Are you sure with your decision?
                   </p>
                   <p className="text-amber-800/90 dark:text-amber-300/90 font-medium leading-relaxed">
-                    Approving <strong>Order #{selectedOrder.id}</strong> for <strong>{selectedOrder.branchName}</strong> will officially clear commissary allocation and enable dispatch scheduling.
+                    Approving <strong>Order #{selectedOrder.id}</strong> for <strong>{selectedOrder.branchName}</strong> will verify its payment and allow production to start. Stock is added only after branch receiving approval.
                   </p>
                 </div>
               </div>
@@ -1013,7 +1003,7 @@ export const AdminOrders: React.FC = () => {
 
             <div className="space-y-3 text-xs">
               <p className="text-neutral-600 dark:text-neutral-300">
-                Are you sure you really want to delete <strong>Order #{selectedOrder.id}</strong> submitted by <strong>{selectedOrder.branchName}</strong>?
+                Are you sure you want to archive <strong>Order #{selectedOrder.id}</strong> submitted by <strong>{selectedOrder.branchName}</strong>?
               </p>
 
               <div className="p-3.5 rounded-2xl bg-red-500/5 border border-red-500/20 space-y-2">
@@ -1033,7 +1023,7 @@ export const AdminOrders: React.FC = () => {
 
               <div className="flex items-start space-x-2 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>Warning: This order and any associated payment attachments will be permanently removed from the system.</span>
+                <span>Only closed orders can be archived. The order, payment proof and audit history will be kept.</span>
               </div>
             </div>
 
@@ -1051,7 +1041,7 @@ export const AdminOrders: React.FC = () => {
                 className="px-4 py-2 text-xs font-bold rounded-xl bg-red-600 hover:bg-red-700 text-white shadow-sm transition-colors flex items-center space-x-1.5"
               >
                 <Trash2 className="w-4 h-4" />
-                <span>Yes, Delete Order</span>
+                <span>Yes, Archive Order</span>
               </button>
             </div>
           </div>

@@ -20,6 +20,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { DailyLogStatus, DailyShiftLog } from '../../types';
+import { InboundApprovalQueue } from './InboundApprovalQueue';
 
 export const ManagerLogValidation: React.FC = () => {
   const {
@@ -59,9 +60,9 @@ export const ManagerLogValidation: React.FC = () => {
   const isPending = selectedLog?.status === DailyLogStatus.PENDING_VALIDATION;
   const isReturned = selectedLog?.status === DailyLogStatus.RETURNED_FOR_REVISION;
 
-  const handleApproveAndLock = () => {
+  const handleApproveAndLock = async () => {
     if (!selectedLog) return;
-    const res = validateAndLockDailyLog(
+    const res = await validateAndLockDailyLog(
       selectedLog.id,
       managerNotes.trim() || 'Daily physical stock, manual sales tally, and wastage verified and locked by Branch Manager.'
     );
@@ -78,7 +79,7 @@ export const ManagerLogValidation: React.FC = () => {
     }
   };
 
-  const handleDisapproveAndReturn = () => {
+  const handleDisapproveAndReturn = async () => {
     if (!selectedLog) return;
     if (!rejectionReason.trim()) {
       setFeedback({
@@ -88,7 +89,7 @@ export const ManagerLogValidation: React.FC = () => {
       return;
     }
 
-    const res = rejectAndReturnDailyLog(selectedLog.id, rejectionReason.trim());
+    const res = await rejectAndReturnDailyLog(selectedLog.id, rejectionReason.trim());
     if (res.success) {
       setFeedback({
         text: `Shift Log (${selectedLog.date}) has been returned to frontline staff for revision.`,
@@ -112,10 +113,10 @@ export const ManagerLogValidation: React.FC = () => {
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-black text-neutral-900 dark:text-white tracking-tight">
-                Log Validation Dashboard
+                Staff & Receiving Approvals
               </h1>
               <p className="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400">
-                Store-level audit: verify physical counts, manual sales, and wastage logs submitted by Branch Staff
+                Approve inbound stock and review staff counts, sales, and wastage logs.
               </p>
             </div>
           </div>
@@ -140,6 +141,8 @@ export const ManagerLogValidation: React.FC = () => {
           <span>{feedback.text}</span>
         </div>
       )}
+
+      <InboundApprovalQueue />
 
       {/* Main Grid: Left Logs Selector + Right Detailed Audit Inspection */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

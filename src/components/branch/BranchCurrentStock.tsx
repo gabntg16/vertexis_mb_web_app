@@ -5,7 +5,12 @@ import { useData } from '../../context/DataContext';
 export const BranchCurrentStock: React.FC = () => {
   const { currentBranch, getInventoryForBranch, themeMode } = useData();
 
-  if (!currentBranch) return null;
+  if (!currentBranch) return (
+    <div role="status" className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <h2 className="font-bold">No branch selected</h2>
+      <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">Your branch stock will appear once your branch assignment is available.</p>
+    </div>
+  );
 
   const inventory = getInventoryForBranch(currentBranch.id);
   const totalUnits = inventory.reduce((sum, item) => sum + item.stock, 0);
@@ -16,7 +21,7 @@ export const BranchCurrentStock: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#80C7F2]/20 text-[#00609C] dark:text-[#80C7F2]">
             Live Branch Stock
           </span>
@@ -67,6 +72,11 @@ export const BranchCurrentStock: React.FC = () => {
         </div>
 
         <div className="space-y-3">
+          {inventory.length === 0 && (
+            <p role="status" className="rounded-xl bg-neutral-50 p-6 text-center text-sm text-neutral-500 dark:bg-neutral-900 dark:text-neutral-400">
+              No inventory records yet. Stock will appear here after inventory is recorded for this branch.
+            </p>
+          )}
           {inventory.map((item) => {
             const isOut = item.stock === 0;
             const isLow = item.stock > 0 && item.stock <= 5;
@@ -85,8 +95,8 @@ export const BranchCurrentStock: React.FC = () => {
                 }`}
               >
                 <div className="min-w-0">
-                  <p className="font-bold text-sm truncate">{item.productName}</p>
-                  <p className="text-[11px] text-neutral-400 mt-0.5">Inventory ledger quantity</p>
+                  <p className="font-bold text-sm break-words">{item.productName}</p>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{isOut ? 'Out of stock' : isLow ? 'Low stock' : 'In stock'}</p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className={`text-lg font-black ${isOut ? 'text-red-600 dark:text-red-400' : isLow ? 'text-amber-600 dark:text-amber-400' : ''}`}>

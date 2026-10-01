@@ -166,56 +166,7 @@ export const MallowChatbot: React.FC<MallowChatbotProps> = ({
             </div>
           </div>
 
-          {/* Model Selector Strip */}
-          <div className="shrink-0 px-3 py-2 border-b border-neutral-100 dark:border-neutral-800/80 bg-neutral-50/60 dark:bg-neutral-900/50 flex items-center justify-between text-xs">
-            <span className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider hidden sm:inline">
-              Model:
-            </span>
-
-            <div className="flex items-center space-x-1 w-full sm:w-auto justify-between sm:justify-start">
-              {[
-                {
-                  id: 'gemini-3.5-flash' as GeminiModelType,
-                  label: 'General',
-                  icon: Sparkles,
-                  desc: 'gemini-3.5-flash',
-                },
-                {
-                  id: 'gemini-3.1-flash-lite' as GeminiModelType,
-                  label: 'Fast',
-                  icon: Zap,
-                  desc: 'gemini-3.1-flash-lite',
-                },
-                {
-                  id: 'gemini-3.1-pro-preview' as GeminiModelType,
-                  label: 'Pro Reasoning',
-                  icon: Brain,
-                  desc: 'gemini-3.1-pro-preview',
-                },
-              ].map((m) => {
-                const Icon = m.icon;
-                const isSelected = selectedModel === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setSelectedModel(m.id)}
-                    className={`flex items-center space-x-1 px-2.5 py-1 rounded-xl font-bold text-[11px] transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-[#80C7F2] text-neutral-950 font-black shadow-2xs'
-                        : isDark
-                        ? 'text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'
-                        : 'text-neutral-600 hover:bg-neutral-200/70 hover:text-neutral-900'
-                    }`}
-                    title={m.desc}
-                  >
-                    <Icon className="w-3 h-3" />
-                    <span>{m.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <p className="border-b border-neutral-200 px-4 py-2 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">Workflow guidance only. The assistant cannot view live records or approve transactions.</p>
 
           {/* Messages Scrollable Thread */}
           <div className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-4 scrollbar-thin">

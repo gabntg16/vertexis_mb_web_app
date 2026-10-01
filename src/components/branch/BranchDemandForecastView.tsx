@@ -72,10 +72,10 @@ export const BranchDemandForecastView: React.FC<BranchDemandForecastViewProps> =
             </span>
           </div>
           <h1 className="text-2xl font-black tracking-tight mt-1">
-            Predictive Demand Analytics
+            Demand forecast
           </h1>
           <p className="text-xs text-neutral-500 font-medium">
-            Automatic replenishment suggestions balancing 14-day historical sales velocity, transit lead time, and safety buffer stock.
+            Estimates based on the past 14 days of recorded sales. Forecasts are not actual sales or guaranteed demand.
           </p>
         </div>
 
@@ -102,11 +102,11 @@ export const BranchDemandForecastView: React.FC<BranchDemandForecastViewProps> =
             <div className="flex items-center space-x-2">
               <Sparkles className="w-4 h-4 text-[#F37021]" />
               <h3 className="text-sm font-black text-neutral-900 dark:text-white">
-                Replenish Suggestion & Stock Alert:
+                Suggested restock
               </h3>
             </div>
             <p className="text-xs text-neutral-600 dark:text-neutral-400">
-              Calculates stable demand trends using a <strong>0.3 smoothing factor (alpha)</strong>. while filtering out inventory waste to prevent ordering errors.
+              Uses a <strong>0.3 smoothing factor (alpha)</strong>. Wastage is excluded. Missing sales records and stockouts can reduce forecast accuracy.
             </p>
           </div>
 
@@ -139,6 +139,7 @@ export const BranchDemandForecastView: React.FC<BranchDemandForecastViewProps> =
             }`}
           >
             <div>
+              {item.hasSalesHistory === false && <p className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">Insufficient data: no recorded sales in the past 14 days. Check stock manually before ordering.</p>}
               <div className="flex items-start justify-between gap-2 pb-3 border-b border-neutral-100 dark:border-neutral-800">
                 <div>
                   <h4 className="font-extrabold text-base text-neutral-900 dark:text-white">
@@ -194,7 +195,7 @@ export const BranchDemandForecastView: React.FC<BranchDemandForecastViewProps> =
               <div className="space-y-1.5 text-xs text-neutral-500 py-2 border-t border-neutral-100 dark:border-neutral-800">
                 <div className="flex justify-between">
                   <span>Expected 7-Day Demand:</span>
-                  <strong className="text-neutral-900 dark:text-white">{item.expectedWeeklyDemand} packs</strong>
+                  <strong className="text-neutral-900 dark:text-white">{item.hasSalesHistory === false ? 'Unavailable' : `${item.expectedWeeklyDemand} packs`}</strong>
                 </div>
                 <div className="flex justify-between">
                   <span>Days of Inventory Remaining:</span>
@@ -207,7 +208,7 @@ export const BranchDemandForecastView: React.FC<BranchDemandForecastViewProps> =
                         : 'text-emerald-500'
                     }
                   >
-                    ~{item.estimatedDepletionDays ?? item.daysOfInventoryLeft ?? 0} days
+                    {item.hasSalesHistory === false || item.smoothedDailyDemand <= 0 ? 'Unavailable' : `~${item.estimatedDepletionDays ?? item.daysOfInventoryLeft ?? 0} days`}
                   </strong>
                 </div>
               </div>

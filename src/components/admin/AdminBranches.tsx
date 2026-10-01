@@ -177,8 +177,8 @@ export const AdminBranches: React.FC = () => {
             <span className="text-[10px] uppercase font-bold tracking-wider">Total Network</span>
             <Store className="w-4 h-4 text-[#80C7F2]" />
           </div>
-          <div className="text-xl font-black text-white mt-1.5">{branches.length}</div>
-          <div className="text-[10px] text-neutral-400 mt-0.5">19 Active franchise units</div>
+          <div className="text-xl font-black text-neutral-900 dark:text-white mt-1.5">{branches.length}</div>
+          <div className="text-[10px] text-neutral-400 mt-0.5">{branchStatusCounts.active} active franchise units</div>
         </div>
 
         {/* Active Operational */}
@@ -192,7 +192,7 @@ export const AdminBranches: React.FC = () => {
             <CheckCircle2 className="w-4 h-4" />
           </div>
           <div className="text-xl font-black text-emerald-400 mt-1.5">{branchStatusCounts.active}</div>
-          <div className="text-[10px] text-neutral-400 mt-0.5">100% operational</div>
+          <div className="text-[10px] text-neutral-400 mt-0.5">{branches.length ? `${Math.round(branchStatusCounts.active / branches.length * 100)}% operational` : 'No active branches yet'}</div>
         </div>
 
         {/* Pending Applications */}
@@ -617,10 +617,10 @@ export const AdminBranches: React.FC = () => {
 
       {/* 2. Review Application & Document Verification Modal */}
       <BranchApplicationReviewModal
-        application={selectedApplication}
+        key={selectedApplication?.id}
+        application={branchApplications.find(application => application.id === selectedApplication?.id) || selectedApplication}
         isOpen={showReviewModal}
         onClose={() => setShowReviewModal(false)}
-        onApplicationUpdated={() => setShowReviewModal(false)}
       />
 
       {/* 3. 360-Degree Branch Details Drawer */}

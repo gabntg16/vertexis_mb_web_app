@@ -1,3 +1,4 @@
+import { businessDate } from '../../../functions/src/transactionModel';
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import {
@@ -35,6 +36,7 @@ export const StaffShiftSummary: React.FC<StaffShiftSummaryProps> = ({ onNavigate
     currentBranch,
     dailyShiftLogs,
     products,
+    sales,
     submitDailyLogForValidation,
     removeSpoilageFromDailyLog,
     removeInboundFromDailyLog,
@@ -43,7 +45,7 @@ export const StaffShiftSummary: React.FC<StaffShiftSummaryProps> = ({ onNavigate
 
   const isDark = themeMode === 'dark';
   const branchId = currentUser?.branchId || currentBranch?.id || 'b-legazpi';
-  const today = new Date().toISOString().split('T')[0];
+  const today = businessDate();
 
   const todayLog = useMemo(() => {
     return (dailyShiftLogs || []).find((l) => l.branchId === branchId && l.date === today);
@@ -66,7 +68,7 @@ export const StaffShiftSummary: React.FC<StaffShiftSummaryProps> = ({ onNavigate
   const totalInventoryVariance = savedCounts.reduce((acc, curr) => acc + (curr.variance || 0), 0);
 
   // Saved Sales
-  const savedSales: DailyManualSalesItem[] = todayLog?.manualSales || [];
+  const savedSales: DailyManualSalesItem[] = isLocked || isPending ? todayLog?.manualSales || [] : sales.filter(s => s.branchId === branchId && businessDate(new Date(s.date)) === today && s.status !== 'voided' && s.status !== 'refunded').map(s => ({ id: s.id, productId: s.productId, productName: s.productName, flavor: s.productName, unitsSold: s.quantity, unitPrice: s.total / s.quantity, totalAmount: s.total, loggedAt: s.date }));
   const totalSalesUnits = savedSales.reduce((acc, curr) => acc + (curr.unitsSold || 0), 0);
   const totalSalesRevenue = savedSales.reduce((acc, curr) => acc + (curr.totalSales || 0), 0);
 
@@ -83,9 +85,9 @@ export const StaffShiftSummary: React.FC<StaffShiftSummaryProps> = ({ onNavigate
   const expectedEndingStock = totalBeginningStock + totalInboundUnits - totalSalesUnits - totalSpoilageUnits;
   const netInventoryVariance = totalEndingStock - expectedEndingStock;
 
-  const handleSubmitDailyLog = () => {
+  const handleSubmitDailyLog = async () => {
     const logId = todayLog?.id || `log-${branchId}-${today}`;
-    const res = submitDailyLogForValidation(logId);
+    const res = await submitDailyLogForValidation(logId);
     setShowConfirmSubmitModal(false);
 
     if (res.success) {
@@ -104,9 +106,10 @@ export const StaffShiftSummary: React.FC<StaffShiftSummaryProps> = ({ onNavigate
     }
   };
 
-  const handleDeleteSpoilage = (id: string, flavor: string) => {
+  const handleDeleteSpoilage = async (id: string, flavor: string) => {
     if (!isEditable) return;
-    removeSpoilageFromDailyLog(id);
+    const result = await removeSpoilageFromDailyLog(id);
+    if (!result.success) { setFeedback({ text: result.error || 'The entry could not be removed.', type: 'error' }); return; }
     setFeedback({
       text: `Removed spoilage record for ${flavor}.`,
       type: 'info',
@@ -114,9 +117,10 @@ export const StaffShiftSummary: React.FC<StaffShiftSummaryProps> = ({ onNavigate
     setTimeout(() => setFeedback(null), 3000);
   };
 
-  const handleConfirmDeleteInbound = () => {
+  const handleConfirmDeleteInbound = async () => {
     if (!inboundToDelete) return;
-    removeInboundFromDailyLog(inboundToDelete.id);
+    const result = await removeInboundFromDailyLog(inboundToDelete.id);
+    if (!result.success) { setFeedback({ text: result.error || 'The summary entry could not be removed.', type: 'error' }); return; }
     setFeedback({
       text: `Removed inbound record for ${inboundToDelete.flavor} (${inboundToDelete.manifestNumber}).`,
       type: 'info',

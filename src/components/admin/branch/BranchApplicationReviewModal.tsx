@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useData } from '../../../context/DataContext';
 import { Branch, BranchAccount, BranchApplication, BranchDocument, DocumentVerificationStatus } from '../../../types';
 import {
@@ -52,6 +52,8 @@ export const BranchApplicationReviewModal: React.FC<BranchApplicationReviewModal
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [showResubmitForm, setShowResubmitForm] = useState(false);
+  const approvalBusy = useRef(false);
+  const [isApproving, setIsApproving] = useState(false);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [approvalResult, setApprovalResult] = useState<{
     branch: Branch;
@@ -77,6 +79,9 @@ export const BranchApplicationReviewModal: React.FC<BranchApplicationReviewModal
   };
 
   const handleApproveApplication = async () => {
+    if (approvalBusy.current) return;
+    approvalBusy.current = true;
+    setIsApproving(true);
     setApprovalError(null);
     try {
       const res = await approveBranchApplication(application.id);
@@ -88,6 +93,9 @@ export const BranchApplicationReviewModal: React.FC<BranchApplicationReviewModal
       if (onApplicationUpdated) onApplicationUpdated();
     } catch (error) {
       setApprovalError(error instanceof Error ? error.message : 'Branch approval failed. Please try again.');
+    } finally {
+      approvalBusy.current = false;
+      setIsApproving(false);
     }
   };
 
@@ -663,11 +671,12 @@ export const BranchApplicationReviewModal: React.FC<BranchApplicationReviewModal
               </button>
 
               <button
+                disabled={isApproving}
                 onClick={handleApproveApplication}
                 className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-lg transition-all flex items-center space-x-2"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Approve Branch & Provision Accounts</span>
+                <span>{isApproving ? 'Provisioning accounts...' : 'Approve Branch & Provision Accounts'}</span>
               </button>
             </div>
           </div>

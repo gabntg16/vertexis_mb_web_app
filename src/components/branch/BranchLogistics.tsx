@@ -16,14 +16,17 @@ import {
   FileText,
 } from 'lucide-react';
 import { InboundDiscrepancySafeguardModal, InboundDiscrepancyDetails } from '../safeguards/InboundDiscrepancySafeguardModal';
+import { InboundApprovalQueue } from './InboundApprovalQueue';
 
 export const BranchLogistics: React.FC = () => {
   const {
     currentBranch,
     deliveries,
     receivings,
+    inboundReceipts,
     orders,
     createReceivingInspection,
+    submitInboundReceipt,
     themeMode,
   } = useData();
 
@@ -31,6 +34,8 @@ export const BranchLogistics: React.FC = () => {
   const [inspectStatus, setInspectStatus] = useState<ReceivingStatus>('received');
   const [receiverName, setReceiverName] = useState('');
   const [inspectNotes, setInspectNotes] = useState('');
+  const [receivingError, setReceivingError] = useState('');
+  const [savingReceipt, setSavingReceipt] = useState(false);
   const [itemCounts, setItemCounts] = useState<Record<string, number>>({});
   const [discrepancySafeguard, setDiscrepancySafeguard] = useState<InboundDiscrepancyDetails | null>(null);
 
@@ -50,7 +55,12 @@ export const BranchLogistics: React.FC = () => {
 
   // Initialize counts when opening modal
   const handleOpenInspection = (del: Delivery) => {
+    if (inboundReceipts.some(r => r.deliveryId === del.id)) {
+      setReceivingError('This delivery has a receiving request. Inspect it in Receiving approvals above.');
+      return;
+    }
     setSelectedDeliveryForInspect(del);
+    setReceivingError('');
     setReceiverName(currentBranch.name + ' Manager');
     setInspectStatus('received');
     setInspectNotes('');
@@ -58,7 +68,7 @@ export const BranchLogistics: React.FC = () => {
     const relOrder = orders.find((o) => o.id === del.orderId);
     const initialCounts: Record<string, number> = {};
     if (relOrder) {
-      relOrder.items.forEach((item) => {
+      (relOrder.dispatchedProducts?.length ? relOrder.dispatchedProducts : relOrder.items).forEach((item) => {
         initialCounts[item.productId] = item.quantity;
       });
     }
@@ -67,7 +77,7 @@ export const BranchLogistics: React.FC = () => {
 
   const handleInspectSubmit = (e: React.FormEvent, bypassSafeguard: boolean = false) => {
     e.preventDefault();
-    if (!selectedDeliveryForInspect || !receiverName.trim() || !selectedOrder) return;
+    if (!selectedDeliveryForInspect || !receiverName.trim() || !selectedOrder || savingReceipt) return;
 
     // Check for discrepancy between dispatched manifest and counted quantities
     let totalDispatched = 0;
@@ -79,7 +89,7 @@ export const BranchLogistics: React.FC = () => {
       variance: number;
     }> = [];
 
-    selectedOrder.items.forEach((item) => {
+    (selectedOrder.dispatchedProducts?.length ? selectedOrder.dispatchedProducts : selectedOrder.items).forEach((item) => {
       totalDispatched += item.quantity;
       const count = itemCounts[item.productId] !== undefined ? itemCounts[item.productId] : item.quantity;
       totalReceived += count;
@@ -130,13 +140,15 @@ export const BranchLogistics: React.FC = () => {
     );
   };
 
-  const executeFinalInspection = (
+  const executeFinalInspection = async (
     del: Delivery,
     status: ReceivingStatus,
     recName: string,
     notes: string,
     discrepancies: any[]
   ) => {
+    if (savingReceipt) return;
+    setSavingReceipt(true);
     let finalNotes = notes;
     if (discrepancies.length > 0) {
       const discSummary = discrepancies
@@ -145,7 +157,24 @@ export const BranchLogistics: React.FC = () => {
       finalNotes = `[DISCREPANCY DETECTED: ${discSummary}] ${notes}`.trim();
     }
 
-    createReceivingInspection(del.id, del.orderId, status, recName, finalNotes);
+    try {
+      if (status === 'received') {
+        const order = orders.find(o => o.id === del.orderId);
+        if (!order) throw new Error('Order not found.');
+        const result = await submitInboundReceipt({
+          deliveryId: del.id, manifestNumber: del.waybillNumber || del.trackingNumber || del.id,
+          supplierOrSource: 'Central Commissary',
+          items: (order.dispatchedProducts?.length ? order.dispatchedProducts : order.items).map(item => {
+            const receivedUnits = itemCounts[item.productId] ?? item.quantity;
+            return { productId: item.productId, productName: item.productName, expectedUnits: item.quantity, receivedUnits, condition: receivedUnits < item.quantity ? 'shortage' : receivedUnits > item.quantity ? 'overage' : 'good', notes: finalNotes };
+          }),
+        });
+        if (!result.success) throw new Error(result.error);
+        setReceivingError('Receipt submitted. Review and approve it above to add the accepted quantities to stock.');
+      } else { createReceivingInspection(del.id, del.orderId, status, recName, finalNotes); }
+    }
+    catch (error) { setReceivingError(error instanceof Error ? error.message : 'Unable to receive delivery.'); return; }
+    finally { setSavingReceipt(false); }
     setSelectedDeliveryForInspect(null);
     setReceiverName('');
     setInspectNotes('');
@@ -158,7 +187,7 @@ export const BranchLogistics: React.FC = () => {
   let formHasDiscrepancy = false;
 
   if (selectedOrder) {
-    selectedOrder.items.forEach((item) => {
+    (selectedOrder.dispatchedProducts?.length ? selectedOrder.dispatchedProducts : selectedOrder.items).forEach((item) => {
       formDispatchedTotal += item.quantity;
       const count = itemCounts[item.productId] !== undefined ? itemCounts[item.productId] : item.quantity;
       formReceivedTotal += count;
@@ -168,6 +197,8 @@ export const BranchLogistics: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <InboundApprovalQueue />
+      {receivingError && <p role="status" className="text-sm p-3 rounded-xl bg-amber-50 text-amber-900">{receivingError}</p>}
       {/* Header */}
       <div>
         <h1 className="text-2xl font-black tracking-tight">Inbound Shipments & Receiving</h1>
@@ -271,46 +302,52 @@ export const BranchLogistics: React.FC = () => {
 
       {/* Inspect / Receiving Acknowledgment Modal with Itemized Verification */}
       {selectedDeliveryForInspect && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
           <div
-            className={`w-full max-w-lg rounded-3xl p-6 shadow-2xl border my-8 ${
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="inbound-inspection-title"
+            className={`w-full max-w-lg max-h-[100dvh] sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl shadow-2xl border ${
               isDark ? 'bg-[#1c1c1c] border-neutral-700 text-white' : 'bg-white border-neutral-200 text-neutral-900'
             }`}
           >
-            <div className="flex items-center space-x-2 text-emerald-600 mb-2">
-              <PackageCheck className="w-5 h-5" />
-              <h3 className="text-base font-bold">Inbound Package Inspection</h3>
+            <div className="shrink-0 border-b border-neutral-200 p-4 sm:p-6 dark:border-neutral-700">
+              <div className="flex items-center space-x-2 text-emerald-600 mb-2">
+                <PackageCheck className="w-5 h-5 shrink-0" />
+                <h3 id="inbound-inspection-title" className="text-base font-bold">Inbound Package Inspection</h3>
+              </div>
+              <p className="text-xs text-neutral-500">
+                Verify counts for Delivery{' '}
+                <strong className="break-all text-neutral-700 dark:text-neutral-300">
+                  {selectedDeliveryForInspect.trackingNumber || selectedDeliveryForInspect.id}
+                </strong>.
+              </p>
             </div>
-            <p className="text-xs text-neutral-500">
-              Verify physical counts against the commissary manifest for Delivery{' '}
-              <strong className="text-neutral-700 dark:text-neutral-300">
-                {selectedDeliveryForInspect.trackingNumber || selectedDeliveryForInspect.id}
-              </strong>.
-            </p>
 
-            <form onSubmit={handleInspectSubmit} className="mt-4 space-y-4 text-xs">
+            <form onSubmit={handleInspectSubmit} className="min-h-0 flex flex-1 flex-col text-xs">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
               {/* Itemized Physical Count Verification */}
               <div className="space-y-2">
                 <label className="block font-bold uppercase tracking-wider text-neutral-400">
                   Itemized Manifest Verification (Dispatched vs Received)
                 </label>
                 <div
-                  className={`rounded-2xl border divide-y overflow-hidden ${
+                  className={`max-h-[38dvh] sm:max-h-[42dvh] overflow-y-auto rounded-2xl border divide-y ${
                     isDark ? 'bg-neutral-900 border-neutral-800 divide-neutral-800' : 'bg-neutral-50 border-neutral-200 divide-neutral-200'
                   }`}
                 >
-                  {selectedOrder.items.map((item) => {
+                  {(selectedOrder.dispatchedProducts?.length ? selectedOrder.dispatchedProducts : selectedOrder.items).map((item) => {
                     const count = itemCounts[item.productId] !== undefined ? itemCounts[item.productId] : item.quantity;
                     const variance = count - item.quantity;
 
                     return (
-                      <div key={item.productId} className="p-3 flex items-center justify-between gap-3">
+                      <div key={item.productId} className="p-3 flex flex-col items-stretch gap-2 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between min-[420px]:gap-3">
                         <div className="min-w-0 flex-1">
                           <p className="font-bold text-neutral-900 dark:text-white truncate">{item.productName}</p>
                           <p className="text-[11px] text-neutral-400">Manifest: {item.quantity} packs</p>
                         </div>
 
-                        <div className="flex items-center space-x-2 shrink-0">
+                        <div className="flex items-center justify-between gap-2 min-[420px]:justify-start min-[420px]:shrink-0">
                           <div className="flex items-center space-x-1">
                             <span className="text-[11px] text-neutral-400">Count:</span>
                             <input
@@ -411,21 +448,26 @@ export const BranchLogistics: React.FC = () => {
                 />
               </div>
 
+              </div>
               {/* Buttons */}
-              <div className="flex items-center justify-end space-x-2 pt-2">
+              <div className="shrink-0 border-t border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-[#1c1c1c]">
+              {receivingError && <p role="alert" className="mb-3 text-sm text-red-600 dark:text-red-400">{receivingError}</p>}
+              <div className="flex flex-col-reverse gap-2 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-end">
                 <button
                   type="button"
                   onClick={() => setSelectedDeliveryForInspect(null)}
-                  className="px-3.5 py-2 font-medium rounded-xl border border-neutral-300 dark:border-neutral-700 cursor-pointer"
+                  className="w-full min-[420px]:w-auto px-3.5 py-2.5 font-medium rounded-xl border border-neutral-300 dark:border-neutral-700 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 transition-all cursor-pointer shadow-xs"
+                  disabled={savingReceipt}
+                  className="w-full min-[420px]:w-auto px-4 py-2.5 font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 transition-all cursor-pointer shadow-xs disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Confirm & Update Stock
+                  {savingReceipt ? 'Saving…' : inspectStatus === 'received' ? 'Request Receiving Approval' : 'Save Inspection'}
                 </button>
+              </div>
               </div>
             </form>
           </div>

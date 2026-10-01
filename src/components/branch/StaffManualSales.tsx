@@ -1,3 +1,4 @@
+import { businessDate } from '../../../functions/src/transactionModel';
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, Banknote, CheckCircle2, Clock, Info, Receipt, Save, Smartphone } from 'lucide-react';
 import { useData } from '../../context/DataContext';
@@ -28,9 +29,9 @@ export const StaffManualSales: React.FC<StaffManualSalesProps> = () => {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = businessDate();
   const todaySales = useMemo(
-    () => getSalesForBranch(branchId).filter((sale) => sale.date.slice(0, 10) === today && sale.status !== 'voided'),
+    () => getSalesForBranch(branchId).filter((sale) => businessDate(new Date(sale.date)) === today && sale.status !== 'voided' && sale.status !== 'refunded'),
     [branchId, getSalesForBranch, today]
   );
   const summary = useMemo(
@@ -49,6 +50,7 @@ export const StaffManualSales: React.FC<StaffManualSalesProps> = () => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (isSaving) return;
     setFeedback(null);
 
     if (!productId) {

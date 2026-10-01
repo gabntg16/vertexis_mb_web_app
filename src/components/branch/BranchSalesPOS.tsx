@@ -10,7 +10,6 @@ import { CashTenderSafeguardModal, CashTenderSafeguardDetails } from '../safegua
 import { HighDiscountSafeguardModal, HighDiscountSafeguardDetails } from '../safeguards/HighDiscountSafeguardModal';
 import { generateClientRequestId } from '../../utils/idempotency';
 import {
-  COMMISSARY_DIGITAL_WALLETS,
 } from '../../services/paymentGateway';
 import {
   ShoppingCart,
@@ -1392,32 +1391,7 @@ export const BranchSalesPOS: React.FC = () => {
                         </span>
                       </div>
 
-                      {/* Payee Account Details Card */}
-                      <div className="p-3 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 space-y-1.5 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="text-neutral-500">Payee Name:</span>
-                          <span className="font-bold text-neutral-900 dark:text-white">
-                            {selectedMethod === 'GCash'
-                              ? COMMISSARY_DIGITAL_WALLETS.gcash.merchantName
-                              : selectedMethod === 'Maya'
-                              ? COMMISSARY_DIGITAL_WALLETS.maya.merchantName
-                              : 'THE MARSH BITES CONFECTIONERY INC.'}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-neutral-500">Account / Mobile:</span>
-                          <span className="font-mono font-bold text-[#F37021]">
-                            {selectedMethod === 'GCash'
-                              ? COMMISSARY_DIGITAL_WALLETS.gcash.walletNumber
-                              : selectedMethod === 'Maya'
-                              ? COMMISSARY_DIGITAL_WALLETS.maya.walletNumber
-                              : 'BDO 0048-2918-4491'}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-neutral-500 pt-1 border-t border-neutral-100 dark:border-neutral-800">
-                          Customer transfers directly to the account above. Inspect customer's completed payment screen and record the reference number below.
-                        </p>
-                      </div>
+                      <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">Collection accounts are not configured. Obtain approved payment details from HQ before accepting a transfer.</p>
 
                       {/* Reference Input */}
                       <div>

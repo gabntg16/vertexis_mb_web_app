@@ -757,6 +757,8 @@ export interface CalendarEvent {
 }
 
 export interface ProductDemandAnalytics {
+  hasSalesHistory?: boolean;
+  historyDays?: number;
   productId: string;
   productName: string;
   flavor: string;
@@ -847,6 +849,7 @@ export interface DailyInboundReceivingItem {
 }
 
 export interface DailyShiftLog {
+  revision?: number;
   id: string;
   date: string; // YYYY-MM-DD
   branchId: string;

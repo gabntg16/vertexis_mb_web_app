@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useData } from '../../context/DataContext';
 import {
   Tag,
@@ -30,27 +30,38 @@ export const AdminProductPricing: React.FC = () => {
   });
 
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const savingRef = useRef(new Set<string>());
+  const [saving, setSaving] = useState<string[]>([]);
 
   const handlePriceChange = (productId: string, field: 'srp' | 'wholesale', val: number) => {
     setPrices((prev) => ({
       ...prev,
       [productId]: {
-        ...prev[productId],
+        ...(prev[productId] || { srp: products.find(p => p.id === productId)?.price ?? 0, wholesale: products.find(p => p.id === productId)?.wholesalePrice ?? 0 }),
         [field]: Math.max(0, val),
       },
     }));
   };
 
-  const handleSavePrice = (productId: string) => {
+  const handleSavePrice = async (productId: string) => {
     const p = prices[productId];
-    if (!p) return;
+    if (!p || savingRef.current.has(productId)) return;
+    savingRef.current.add(productId);
+    setSaving([...savingRef.current]);
 
-    const res = updateProductPricing(productId, p.srp, p.wholesale);
+    try {
+    const res = await updateProductPricing(productId, p.srp, p.wholesale);
     if (res.success) {
       setFeedback({ text: `Updated pricing for product ${productId}.`, type: 'success' });
       setTimeout(() => setFeedback(null), 3000);
     } else {
       setFeedback({ text: res.error || 'Failed to update pricing.', type: 'error' });
+    }
+    } catch {
+      setFeedback({ text: 'Could not save prices. Please try again.', type: 'error' });
+    } finally {
+      savingRef.current.delete(productId);
+      setSaving([...savingRef.current]);
     }
   };
 
@@ -68,7 +79,7 @@ export const AdminProductPricing: React.FC = () => {
                 Pricing Management
               </h1>
               <p className="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400">
-                 Manage wholesale commissary rates and retail SRP across all 19+ branches.
+                 Manage wholesale commissary rates and retail SRP across branches. Package orders use the Silver, Gold and Platinum configuration.
               </p>
             </div>
           </div>
@@ -80,12 +91,12 @@ export const AdminProductPricing: React.FC = () => {
       
 
       {feedback && (
-        <div className={`p-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center space-x-2 ${
+        <div role="status" className={`p-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center space-x-2 ${
           feedback.type === 'success'
             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
             : 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800'
         }`}>
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          {feedback.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
           <span>{feedback.text}</span>
         </div>
       )}
@@ -93,7 +104,7 @@ export const AdminProductPricing: React.FC = () => {
       {/* Pricing Table */}
       <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#181818] shadow-xs">
         <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 font-bold text-xs sm:text-sm text-neutral-900 dark:text-white flex items-center justify-between">
-          <span>Enterprise SKU Price Matrix</span>
+          <span>Product prices</span>
           <span className="text-xs font-mono text-neutral-400">{products.length} SKUs Listed</span>
         </div>
 
@@ -131,7 +142,9 @@ export const AdminProductPricing: React.FC = () => {
                         <span className="text-neutral-400 font-bold">₱</span>
                         <input
                           type="number"
-                          min="1"
+                          aria-label={`Wholesale price for ${p.name}`}
+                          min="0"
+                          step="0.01"
                           value={currentPrice.wholesale}
                           onChange={(e) => handlePriceChange(p.id, 'wholesale', parseFloat(e.target.value) || 0)}
                           className="w-20 px-2 py-1 text-center font-mono font-bold rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-[#121212] text-neutral-900 dark:text-white focus:ring-1 focus:ring-[#80C7F2]"
@@ -143,7 +156,9 @@ export const AdminProductPricing: React.FC = () => {
                         <span className="text-neutral-400 font-bold">₱</span>
                         <input
                           type="number"
-                          min="1"
+                          aria-label={`Retail price for ${p.name}`}
+                          min="0"
+                          step="0.01"
                           value={currentPrice.srp}
                           onChange={(e) => handlePriceChange(p.id, 'srp', parseFloat(e.target.value) || 0)}
                           className="w-20 px-2 py-1 text-center font-mono font-bold rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-[#121212] text-neutral-900 dark:text-white focus:ring-1 focus:ring-[#80C7F2]"
@@ -158,11 +173,12 @@ export const AdminProductPricing: React.FC = () => {
                     <td className="py-3.5 px-4 text-right">
                       <button
                         type="button"
+                        disabled={saving.includes(p.id) || !prices[p.id]}
                         onClick={() => handleSavePrice(p.id)}
                         className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200 transition-all cursor-pointer"
                       >
                         <Save className="w-3.5 h-3.5" />
-                        <span>Save</span>
+                        <span>{saving.includes(p.id) ? 'Saving…' : 'Save'}</span>
                       </button>
                     </td>
                   </tr>

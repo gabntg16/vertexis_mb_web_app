@@ -1,3 +1,5 @@
+import { httpsCallable } from 'firebase/functions';
+import { auth, functions, isFirebaseConfigured } from '../../lib/firebase';
 import { useState, useEffect, useCallback } from 'react';
 import { ChatMessage } from './ChatMessageItem';
 
@@ -14,37 +16,22 @@ interface UseGeminiChatOptions {
 const DEFAULT_WELCOME_MESSAGE: ChatMessage = {
   id: 'welcome-0',
   role: 'model',
-  content: `👋 **Welcome to VertexIS AI Copilot!**\n\nI am **MallowBot**, your operational assistant for Marsh Bites Gourmet Marshmallow Enterprise.\n\nAsk me anything about:\n- **Frontline Counting & Audits**: Daily physical shelf counts & variance tracking.\n- **Wholesale Requisitions**: Made-to-order packages (Silver, Gold, Platinum) & flavor limits.\n- **Predictive Analytics**: Single Exponential Smoothing (α=0.3) & Reorder Points.\n- **Logistics & QA**: 4-stage commissary tracking & spoilage reporting.\n\nSelect a topic below or type your question!`,
+  content: `Welcome to VertexIS help. Ask about requisitions, receiving approvals, daily shifts or stock reports. I can explain the workflow, but I cannot access your live records or perform transactions.`,
   timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
   model: 'gemini-3.5-flash',
 };
 
 export function useGeminiChat({ userRole, currentTab, branchName }: UseGeminiChatOptions = {}) {
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {
-      // fallback
-    }
-    return [DEFAULT_WELCOME_MESSAGE];
-  });
-
+  const [messages, setMessages] = useState<ChatMessage[]>([DEFAULT_WELCOME_MESSAGE]);
   const [selectedModel, setSelectedModel] = useState<GeminiModelType>('gemini-3.5-flash');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync to localStorage
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-    } catch {
-      // ignore
-    }
-  }, [messages]);
+    // Remove the old shared history; keep conversations in this signed-in view only.
+    localStorage.removeItem(STORAGE_KEY);
+    setMessages([DEFAULT_WELCOME_MESSAGE]);
+  }, [userRole, branchName]);
 
   // Dynamic starter prompts tailored to role & active tab
   const getSuggestions = useCallback(() => {
@@ -58,7 +45,7 @@ export function useGeminiChat({ userRole, currentTab, branchName }: UseGeminiCha
     }
     if (userRole === 'branch_manager') {
       return [
-        'What are the package limits for Silver (50), Gold (100), and Platinum (200)?',
+        'What are the package limits for Silver, Gold, and Platinum?',
         'How do I review and validate frontline staff shift counts?',
         'How does AI Demand Auto-Fill calculate flavor allocations?',
         'What are the storage and spoilage criteria for gourmet marshmallows?',
@@ -91,28 +78,11 @@ export function useGeminiChat({ userRole, currentTab, branchName }: UseGeminiCha
     setIsLoading(true);
 
     try {
-      // Call server-side /api/chat endpoint
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: newHistory.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-          model: selectedModel,
-          userRole,
-          currentTab,
-          branchName,
-        }),
-      });
-
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => null);
-        throw new Error(errJson?.error || `Server responded with ${response.status}`);
-      }
-
-      const data = await response.json();
+      const uid = auth.currentUser?.uid;
+      if (!isFirebaseConfigured || !uid) throw new Error('Sign in to use the assistant.');
+      const ask = httpsCallable<unknown, { reply: string; model: GeminiModelType }>(functions, 'assistantChat');
+      const data = (await ask({ messages: newHistory.filter(m => m.id !== 'welcome-0' && !m.id.startsWith('bot-err-')).slice(-20).map(m => ({ role: m.role, content: m.content })) })).data;
+      if (uid !== auth.currentUser?.uid) return;
       const botReply: ChatMessage = {
         id: `bot-${Date.now()}`,
         role: 'model',
@@ -123,13 +93,12 @@ export function useGeminiChat({ userRole, currentTab, branchName }: UseGeminiCha
 
       setMessages((prev) => [...prev, botReply]);
     } catch (err: any) {
-      console.error('Chat error:', err);
       setError(err?.message || 'Failed to send message.');
 
       const errorBotMessage: ChatMessage = {
         id: `bot-err-${Date.now()}`,
         role: 'model',
-        content: `⚠️ **Unable to complete AI query:** ${err?.message || 'Server error'}.\n\nPlease try again or switch model mode.`,
+        content: `⚠️ **Unable to complete AI query:** ${err?.message || 'Server error'}.\n\nPlease try again later.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         model: selectedModel,
       };

@@ -1,19 +1,24 @@
+import { subscribeWithRecovery } from './syncSubscription';
 import {
   collection,
   doc,
   setDoc,
   deleteDoc,
-  onSnapshot,
+  documentId,
   getDocs,
   writeBatch,
+  runTransaction,
   serverTimestamp,
   query,
+  or,
   where,
   Query,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../lib/firebase';
+import type { InboundReceipt } from '../../functions/src/inboundReceivingModel';
 import {
   UserModel,
+  DailyShiftLog,
   Branch,
   Product,
   Order,
@@ -37,7 +42,7 @@ import {
   PhysicalInventoryAudit,
 } from '../types';
 
-export type SyncStatus = 'connected' | 'syncing' | 'offline' | 'error';
+export type SyncStatus = 'local' | 'connected' | 'syncing' | 'offline' | 'error';
 
 export interface SyncState {
   status: SyncStatus;
@@ -49,7 +54,7 @@ export type SyncScope =
   | { role: 'admin' }
   | { role: 'branch'; branchId: string; userId: string };
 
-const GLOBAL_COLLECTIONS = new Set(['products', 'announcements', 'events']);
+const GLOBAL_COLLECTIONS = new Set(['products']);
 const BRANCH_SCOPED_COLLECTIONS = new Set([
   'branch_documents',
   'branch_accounts',
@@ -58,6 +63,8 @@ const BRANCH_SCOPED_COLLECTIONS = new Set([
   'orders',
   'deliveries',
   'receivings',
+  'inbound_receipts',
+  'daily_shift_logs',
   'inventory',
   'sales',
   'production_batches',
@@ -74,9 +81,20 @@ export class FirestoreSyncService {
   private unsubscribers: (() => void)[] = [];
   private syncListeners: ((state: SyncState) => void)[] = [];
   private state: SyncState = {
-    status: 'syncing',
+    status: 'offline',
     lastSyncedAt: null,
   };
+
+  private failures = new Map<string, string>();
+  private listenerStates = new Map<string, SyncStatus>();
+
+  private reportListeners() {
+    const states = [...this.listenerStates.values()];
+    const error = [...this.failures.values()][0];
+    const status: SyncStatus = error ? 'error' : states.includes('offline') ? 'offline'
+      : states.includes('syncing') ? 'syncing' : 'connected';
+    this.updateState({ status, error, ...(status === 'connected' ? { lastSyncedAt: new Date() } : {}) });
+  }
 
   private processedRequestKeys = new Set<string>();
 
@@ -114,7 +132,14 @@ export class FirestoreSyncService {
   }
 
   private updateState(newState: Partial<SyncState>) {
+    if (newState.status === 'connected' && !this.failures.size) {
+      const states = [...this.listenerStates.values()];
+      if (states.includes('offline')) newState = { ...newState, status: 'offline' };
+      else if (states.includes('syncing')) newState = { ...newState, status: 'syncing' };
+    }
+    if (newState.status === 'connected' && this.failures.size) newState = { ...newState, status: 'error', error: [...this.failures.values()][0] };
     this.state = { ...this.state, ...newState };
+    if (newState.status === 'connected') this.state.error = undefined;
     this.syncListeners.forEach((cb) => cb(this.state));
   }
 
@@ -126,6 +151,8 @@ export class FirestoreSyncService {
     onOrders?: (orders: Order[]) => void;
     onDeliveries?: (deliveries: Delivery[]) => void;
     onReceivings?: (receivings: Receiving[]) => void;
+    onDailyShiftLogs?: (logs: DailyShiftLog[]) => void;
+    onInboundReceipts?: (receipts: InboundReceipt[]) => void;
     onInventory?: (inventory: InventoryItem[]) => void;
     onSales?: (sales: Sale[]) => void;
     onAnnouncements?: (announcements: Announcement[]) => void;
@@ -145,319 +172,118 @@ export class FirestoreSyncService {
   }, scope: SyncScope): () => void {
     this.cleanup();
     if (!isFirebaseConfigured) {
-      this.updateState({ status: 'offline', lastSyncedAt: new Date() });
+      this.updateState({ status: 'local', error: undefined });
       return () => {};
     }
-    this.updateState({ status: 'syncing' });
+    this.updateState({ status: 'syncing', error: undefined });
 
-    const scopedCollection = (collectionName: string): Query => {
-      const ref = collection(db, collectionName);
-      if (scope.role === 'admin' || GLOBAL_COLLECTIONS.has(collectionName)) return ref;
-      if (collectionName === 'branches') return query(ref, where('id', '==', scope.branchId));
-      if (BRANCH_SCOPED_COLLECTIONS.has(collectionName)) {
-        return query(ref, where('branchId', '==', scope.branchId));
-      }
+    // Live order and approval updates require standard realtime listeners.
+    const scopedCollection = (name: string): Query => {
+      const ref = collection(db, name);
+      if (scope.role === 'admin' || GLOBAL_COLLECTIONS.has(name)) return ref;
+      if (name === 'announcements') return query(ref, or(where('scope', 'in', ['nationwide', 'global']), where('targetBranchId', '==', scope.branchId)));
+      if (name === 'events') return query(ref, where('branchId', 'in', ['ALL', scope.branchId]));
+      // Rules authorize the document path, not the optional data.id field.
+      if (name === 'branches') return query(ref, where(documentId(), '==', scope.branchId));
+      if (BRANCH_SCOPED_COLLECTIONS.has(name)) return query(ref, where('branchId', '==', scope.branchId));
       return ref;
     };
 
-    const branchOnly = scope.role === 'branch';
+    const subscribe = <T,>(name: string, callback?: (rows: T[]) => void) => {
+      if (!callback) return;
+      this.listenerStates.set(name, 'syncing');
+      const unsubscribe = subscribeWithRecovery(scopedCollection(name), {
+        next: snapshot => {
+          callback(snapshot.docs.map(document => ({ ...document.data(), id: document.id }) as T));
+          this.failures.delete(`listen:${name}`);
+          this.listenerStates.set(name, snapshot.metadata.fromCache ? 'offline' : 'connected');
+          this.reportListeners();
+        },
+        error: (error, retrying) => {
+          this.listenerStates.set(name, retrying ? 'offline' : 'error');
+          if (!retrying) this.failures.set(`listen:${name}`, `${name}: ${error.message} (${error.code})`);
+          this.reportListeners();
+        },
+      });
+      this.unsubscribers.push(unsubscribe);
+    };
 
-    try {
-      // 1. Branches
-      if (callbacks.onBranches) {
-        const unsub = onSnapshot(
-          scopedCollection('branches'),
-          (snap) => {
-            const data: Branch[] = snap.docs.map((d) => d.data() as Branch);
-            callbacks.onBranches!(data);
-            this.updateState({ status: 'connected', lastSyncedAt: new Date() });
-          },
-          (err) => {
-            console.warn('[Firestore] Branches snapshot error:', err);
-            this.updateState({ status: 'offline', error: err.message });
-          }
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 1b. Branch Applications
-      if (callbacks.onBranchApplications && scope.role === 'admin') {
-        const unsub = onSnapshot(
-          scopedCollection('branch_applications'),
-          (snap) => {
-            const data: BranchApplication[] = snap.docs.map((d) => d.data() as BranchApplication);
-            callbacks.onBranchApplications!(data);
-          },
-          (err) => console.warn('[Firestore] Branch Applications snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 1c. Branch Documents
-      if (callbacks.onBranchDocuments && (scope.role === 'admin' || branchOnly)) {
-        const unsub = onSnapshot(
-          scopedCollection('branch_documents'),
-          (snap) => {
-            const data: BranchDocument[] = snap.docs.map((d) => d.data() as BranchDocument);
-            callbacks.onBranchDocuments!(data);
-          },
-          (err) => console.warn('[Firestore] Branch Documents snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 1d. Branch Accounts
-      if (callbacks.onBranchAccounts && (scope.role === 'admin' || branchOnly)) {
-        const unsub = onSnapshot(
-          scopedCollection('branch_accounts'),
-          (snap) => {
-            const data: BranchAccount[] = snap.docs.map((d) => d.data() as BranchAccount);
-            callbacks.onBranchAccounts!(data);
-          },
-          (err) => console.warn('[Firestore] Branch Accounts snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 1e. Branch Status History
-      if (callbacks.onBranchStatusHistory && (scope.role === 'admin' || branchOnly)) {
-        const unsub = onSnapshot(
-          scopedCollection('branch_status_history'),
-          (snap) => {
-            const data: BranchStatusHistory[] = snap.docs.map((d) => d.data() as BranchStatusHistory);
-            callbacks.onBranchStatusHistory!(data);
-          },
-          (err) => console.warn('[Firestore] Branch Status History snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 1f. Branch Audit Logs
-      if (callbacks.onBranchAuditLogs && (scope.role === 'admin' || branchOnly)) {
-        const unsub = onSnapshot(
-          scopedCollection('branch_audit_logs'),
-          (snap) => {
-            const data: BranchAuditLog[] = snap.docs.map((d) => d.data() as BranchAuditLog);
-            callbacks.onBranchAuditLogs!(data);
-          },
-          (err) => console.warn('[Firestore] Branch Audit Logs snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 2. Users
-      if (callbacks.onUsers && scope.role === 'admin') {
-        const unsub = onSnapshot(
-          scopedCollection('users'),
-          (snap) => {
-            const data: UserModel[] = snap.docs.map((d) => d.data() as UserModel);
-            callbacks.onUsers!(data);
-          },
-          (err) => console.warn('[Firestore] Users snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 3. Products
-      if (callbacks.onProducts) {
-        const unsub = onSnapshot(
-          scopedCollection('products'),
-          (snap) => {
-            const data: Product[] = snap.docs.map((d) => d.data() as Product);
-            callbacks.onProducts!(data);
-          },
-          (err) => console.warn('[Firestore] Products snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 4. Orders
-      if (callbacks.onOrders) {
-        const unsub = onSnapshot(
-          scopedCollection('orders'),
-          (snap) => {
-            const data: Order[] = snap.docs.map((d) => d.data() as Order);
-            callbacks.onOrders!(data);
-          },
-          (err) => console.warn('[Firestore] Orders snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 5. Deliveries
-      if (callbacks.onDeliveries) {
-        const unsub = onSnapshot(
-          scopedCollection('deliveries'),
-          (snap) => {
-            const data: Delivery[] = snap.docs.map((d) => d.data() as Delivery);
-            callbacks.onDeliveries!(data);
-          },
-          (err) => console.warn('[Firestore] Deliveries snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 6. Receivings
-      if (callbacks.onReceivings) {
-        const unsub = onSnapshot(
-          scopedCollection('receivings'),
-          (snap) => {
-            const data: Receiving[] = snap.docs.map((d) => d.data() as Receiving);
-            callbacks.onReceivings!(data);
-          },
-          (err) => console.warn('[Firestore] Receivings snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 7. Inventory
-      if (callbacks.onInventory) {
-        const unsub = onSnapshot(
-          scopedCollection('inventory'),
-          (snap) => {
-            const data: InventoryItem[] = snap.docs.map((d) => d.data() as InventoryItem);
-            callbacks.onInventory!(data);
-          },
-          (err) => console.warn('[Firestore] Inventory snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 8. Sales
-      if (callbacks.onSales) {
-        const unsub = onSnapshot(
-          scopedCollection('sales'),
-          (snap) => {
-            const data: Sale[] = snap.docs.map((d) => d.data() as Sale);
-            callbacks.onSales!(data);
-          },
-          (err) => console.warn('[Firestore] Sales snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 9. Announcements
-      if (callbacks.onAnnouncements) {
-        const unsub = onSnapshot(
-          scopedCollection('announcements'),
-          (snap) => {
-            const data: Announcement[] = snap.docs.map((d) => d.data() as Announcement);
-            callbacks.onAnnouncements!(data);
-          },
-          (err) => console.warn('[Firestore] Announcements snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 10. Events
-      if (callbacks.onEvents) {
-        const unsub = onSnapshot(
-          scopedCollection('events'),
-          (snap) => {
-            const data: CalendarEvent[] = snap.docs.map((d) => d.data() as CalendarEvent);
-            callbacks.onEvents!(data);
-          },
-          (err) => console.warn('[Firestore] Events snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 11. Production Batches
-      if (callbacks.onProductionBatches) {
-        const unsub = onSnapshot(
-          scopedCollection('production_batches'),
-          (snap) => {
-            const data: ProductionBatch[] = snap.docs.map((d) => d.data() as ProductionBatch);
-            callbacks.onProductionBatches!(data);
-          },
-          (err) => console.warn('[Firestore] Production Batches snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 12. BIR Receipts
-      if (callbacks.onBirReceipts) {
-        const unsub = onSnapshot(
-          scopedCollection('birReceipts'),
-          (snap) => {
-            const data: BIRReceipt[] = snap.docs.map((d) => d.data() as BIRReceipt);
-            callbacks.onBirReceipts!(data);
-          },
-          (err) => console.warn('[Firestore] BIR Receipts snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 13. Inventory Movements
-      if (callbacks.onInventoryMovements) {
-        const unsub = onSnapshot(
-          scopedCollection('inventoryMovements'),
-          (snap) => {
-            const data: InventoryMovementRecord[] = snap.docs.map((d) => d.data() as InventoryMovementRecord);
-            callbacks.onInventoryMovements!(data);
-          },
-          (err) => console.warn('[Firestore] Inventory Movements snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 14. POS Audit Logs
-      if (callbacks.onPosAuditLogs) {
-        const unsub = onSnapshot(
-          scopedCollection('posAuditLogs'),
-          (snap) => {
-            const data: POSAuditLog[] = snap.docs.map((d) => d.data() as POSAuditLog);
-            callbacks.onPosAuditLogs!(data);
-          },
-          (err) => console.warn('[Firestore] POS Audit Logs snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 15. Shift Closings (Z-Readings)
-      if (callbacks.onShiftClosings) {
-        const unsub = onSnapshot(
-          scopedCollection('shiftClosings'),
-          (snap) => {
-            const data: ShiftClosingRecord[] = snap.docs.map((d) => d.data() as ShiftClosingRecord);
-            callbacks.onShiftClosings!(data);
-          },
-          (err) => console.warn('[Firestore] Shift Closings snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 16. Spoilage Records
-      if (callbacks.onSpoilageRecords) {
-        const unsub = onSnapshot(
-          scopedCollection('spoilage_records'),
-          (snap) => {
-            const data: SpoilageRecord[] = snap.docs.map((d) => d.data() as SpoilageRecord);
-            callbacks.onSpoilageRecords!(data);
-          },
-          (err) => console.warn('[Firestore] Spoilage Records snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-
-      // 17. Physical Audits
-      if (callbacks.onPhysicalAudits) {
-        const unsub = onSnapshot(
-          scopedCollection('physical_audits'),
-          (snap) => {
-            const data: PhysicalInventoryAudit[] = snap.docs.map((d) => d.data() as PhysicalInventoryAudit);
-            callbacks.onPhysicalAudits!(data);
-          },
-          (err) => console.warn('[Firestore] Physical Audits snapshot error:', err)
-        );
-        this.unsubscribers.push(unsub);
-      }
-    } catch (e: any) {
-      console.error('[Firestore] subscribeAll error:', e);
-      this.updateState({ status: 'error', error: e?.message });
+    subscribe('branches', callbacks.onBranches);
+    subscribe('products', callbacks.onProducts);
+    subscribe('orders', callbacks.onOrders);
+    subscribe('deliveries', callbacks.onDeliveries);
+    subscribe('receivings', callbacks.onReceivings);
+    subscribe('inbound_receipts', callbacks.onInboundReceipts);
+    subscribe('daily_shift_logs', callbacks.onDailyShiftLogs);
+    subscribe('inventory', callbacks.onInventory);
+    subscribe('sales', callbacks.onSales);
+    subscribe('announcements', callbacks.onAnnouncements);
+    subscribe('events', callbacks.onEvents);
+    subscribe('branch_documents', callbacks.onBranchDocuments);
+    subscribe('branch_accounts', callbacks.onBranchAccounts);
+    subscribe('branch_status_history', callbacks.onBranchStatusHistory);
+    subscribe('branch_audit_logs', callbacks.onBranchAuditLogs);
+    subscribe('birReceipts', callbacks.onBirReceipts);
+    subscribe('inventoryMovements', callbacks.onInventoryMovements);
+    subscribe('posAuditLogs', callbacks.onPosAuditLogs);
+    subscribe('shiftClosings', callbacks.onShiftClosings);
+    subscribe('spoilage_records', callbacks.onSpoilageRecords);
+    subscribe('physical_audits', callbacks.onPhysicalAudits);
+    if (scope.role === 'admin') {
+      subscribe('users', callbacks.onUsers);
+      subscribe('branch_applications', callbacks.onBranchApplications);
+      subscribe('production_batches', callbacks.onProductionBatches);
     }
-
     return () => this.cleanup();
+  }
+  public async prepareBranchForApproval(branch: Branch): Promise<void> {
+    if (!isFirebaseConfigured) return;
+    await runTransaction(db, async transaction => {
+      const ref = doc(db, 'branches', branch.id);
+      const existing = await transaction.get(ref);
+      if (existing.exists()) {
+        if (existing.data().applicationId !== branch.applicationId) {
+          throw new Error('This branch ID is already used by another application.');
+        }
+        return;
+      }
+      transaction.set(ref, sanitizeForFirestore({ ...branch, status: 'Pending Activation' }));
+    });
+  }
+
+  public async saveApprovalRecords(records: { collection: string; id: string; data: unknown }[]): Promise<void> {
+    if (!isFirebaseConfigured) return;
+    const batch = writeBatch(db);
+    for (const record of records) batch.set(doc(db, record.collection, record.id), sanitizeForFirestore(record.data) as Record<string, unknown>, { merge: true });
+    await batch.commit();
+    this.updateState({ status: 'connected', lastSyncedAt: new Date() });
+  }
+
+  // Applications must not appear submitted if any compliance document fails.
+  public async saveBranchApplication(application: BranchApplication, audit: BranchAuditLog): Promise<void> {
+    const sanitized = sanitizeForFirestore(application);
+    // Embedded receipts are duplicated in the application for the review screen.
+    // Leave room below Firestore's 1 MiB limit for field names and metadata.
+    if (new TextEncoder().encode(JSON.stringify(sanitized)).byteLength > 900000) {
+      throw new Error('The combined application documents are too large. Compress the uploads to less than 650 KB total and try again.');
+    }
+    if (!isFirebaseConfigured) return;
+    try {
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'branch_applications', application.id), sanitized);
+      for (const document of application.documents) {
+        if (document.applicationId !== application.id || document.branchId !== application.id) {
+          throw new Error('Application documents must be linked to the pending application.');
+        }
+        batch.set(doc(db, 'branch_documents', document.id), sanitizeForFirestore(document));
+      }
+      batch.set(doc(db, 'branch_audit_logs', audit.id), sanitizeForFirestore(audit));
+      await batch.commit();
+      this.updateState({ status: 'connected', lastSyncedAt: new Date() });
+    } catch (error) {
+      // The form owns this failure and keeps the draft available for retry.
+      throw new Error(describeWriteError('Branch application', error));
+    }
   }
 
   // Generic Save Document to Firestore
@@ -475,13 +301,14 @@ export class FirestoreSyncService {
       const sanitized = sanitizeForFirestore(data);
       const ref = doc(db, collectionName, id);
       await setDoc(ref, { ...sanitized, updatedAt: serverTimestamp() }, { merge: true });
+      this.failures.delete(`${collectionName}/${id}`);
       this.updateState({ status: 'connected', lastSyncedAt: new Date() });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(`[Firestore] Sync failed for ${collectionName}/${id} (Operating in Offline/Demo Mode):`, message);
+      const message = describeWriteError(`${collectionName}/${id}`, err);
+      this.failures.set(`${collectionName}/${id}`, message);
       this.updateState({ status: 'error', error: message });
-      // Graceful fallback: do not throw to prevent unhandled promise rejections.
-      // Local optimistic state in DataContext will persist for demo purposes.
+      // Legacy nontransactional screens receive a persistent sync error.
+      // Financial and inventory commands use the callable API and propagate errors.
     }
   }
 
@@ -493,12 +320,13 @@ export class FirestoreSyncService {
     try {
       const ref = doc(db, collectionName, id);
       await deleteDoc(ref);
+      this.failures.delete(`${collectionName}/${id}`);
       this.updateState({ status: 'connected', lastSyncedAt: new Date() });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(`[Firestore] Delete failed for ${collectionName}/${id} (Operating in Offline/Demo Mode):`, message);
+      const message = describeWriteError(`${collectionName}/${id}`, err);
+      this.failures.set(`${collectionName}/${id}`, message);
       this.updateState({ status: 'error', error: message });
-      // Graceful fallback: do not throw.
+      // Keep the error visible; do not present this as a successful cloud save.
     }
   }
 
@@ -597,9 +425,17 @@ export class FirestoreSyncService {
     }
   }
 
-  public cleanup() {
+  public cleanup(clearSession = false) {
     this.unsubscribers.forEach((u) => u());
     this.unsubscribers = [];
+    this.listenerStates.clear();
+    for (const key of this.failures.keys()) {
+      if (key.startsWith('listen:')) this.failures.delete(key);
+    }
+    if (clearSession) {
+      this.failures.clear();
+      this.processedRequestKeys.clear();
+    }
   }
 }
 
@@ -618,6 +454,9 @@ export function sanitizeForFirestore<T>(data: T): T {
       .filter((item) => item !== undefined)
       .map((item) => sanitizeForFirestore(item)) as any;
   }
+  // Preserve SDK values (Timestamp, GeoPoint, references and field transforms).
+  const prototype = Object.getPrototypeOf(data);
+  if (prototype !== Object.prototype && prototype !== null) return data;
   const cleanObj: Record<string, any> = {};
   for (const [key, value] of Object.entries(data as Record<string, any>)) {
     if (value !== undefined) {
@@ -636,3 +475,13 @@ function chunkArray<T>(array: T[], size: number): T[][] {
 }
 
 export const firestoreSync = FirestoreSyncService.getInstance();
+
+function describeWriteError(label: string, error: unknown): string {
+  const code = (error as { code?: string } | null)?.code || 'unknown';
+  const reason = code === 'permission-denied'
+    ? 'Your account or the submitted data does not meet the cloud access rules.'
+    : code === 'unauthenticated'
+    ? 'Your session expired. Sign in again.'
+    : error instanceof Error ? error.message : 'Check your connection and try again.';
+  return `${label} was not saved (${code}). ${reason}`;
+}

@@ -1,3 +1,5 @@
+import { defineSecret } from 'firebase-functions/params';
+import { answerAssistant } from './assistant.js';
 import { randomBytes } from 'node:crypto';
 import { initializeApp } from 'firebase-admin/app';
 import { Auth, getAuth } from 'firebase-admin/auth';
@@ -5,6 +7,9 @@ import { Firestore, getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall, CallableRequest } from 'firebase-functions/v2/https';
 import { onInit } from 'firebase-functions/v2/core';
 import { setGlobalOptions } from 'firebase-functions/v2/options';
+import { transactionActor } from './transactionCommands.js';
+export { commitTransaction, getPaymentProof } from './orderFunctions.js';
+export { submitInboundReceipt, reviewInboundReceipt } from './inboundFunctions.js';
 
 setGlobalOptions({ region: 'asia-southeast1', maxInstances: 10 });
 
@@ -26,6 +31,9 @@ function getDb(): Firestore {
   if (!db) throw new Error('Firebase Admin Firestore has not been initialized.');
   return db;
 }
+
+const geminiApiKey = defineSecret('GEMINI_API_KEY');
+export const assistantChat = onCall({ secrets: [geminiApiKey], timeoutSeconds: 40, enforceAppCheck: process.env.ENFORCE_APP_CHECK === 'true' }, request => answerAssistant(getDb(), request, geminiApiKey.value()));
 
 type AccountRole = 'Branch Manager' | 'Staff' | 'Cashier' | 'Inventory Specialist';
 type ProvisionPayload = {
@@ -50,11 +58,9 @@ const permissionsByRole: Record<AccountRole, string[]> = {
   'Inventory Specialist': ['Inventory Management', 'Quality Receiving Inspections', 'Stock Replenishment Logs'],
 };
 
-function requireAdmin(request: CallableRequest<unknown>): void {
-  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign-in is required.');
-  if (request.auth.token.role !== 'admin') {
-    throw new HttpsError('permission-denied', 'Only an administrator can provision accounts.');
-  }
+async function requireAdmin(request: CallableRequest<unknown>): Promise<void> {
+  const actor = await transactionActor(getDb(), request);
+  if (actor.role !== 'admin') throw new HttpsError('permission-denied', 'Only an administrator can manage accounts.');
 }
 
 function requireAuthenticated(request: CallableRequest<unknown>): NonNullable<CallableRequest<unknown>['auth']> {
@@ -86,7 +92,7 @@ function normalizedProfileRole(role: 'admin' | 'branch'): 'admin' | 'branch' {
 }
 
 export const provisionUser = onCall(async (request) => {
-  requireAdmin(request);
+  await requireAdmin(request);
   const payload = (request.data || {}) as ProvisionPayload;
   const name = getString(payload.name, 'Name', 120);
   const email = getEmail(payload.email);
@@ -122,6 +128,7 @@ export const provisionUser = onCall(async (request) => {
     name,
     email,
     role: normalizedProfileRole(role),
+    rbacTier: role === 'admin' ? 'SUPER_ADMIN' : branchRole === 'Branch Manager' ? 'BRANCH_MANAGER' : 'BRANCH_STAFF',
     ...(branchId ? { branchId, branchName: branchSnapshot?.data()?.name || '' } : {}),
     createdAt: new Date().toISOString(),
   };
@@ -170,7 +177,16 @@ export const resolveMyProfile = onCall(async (request) => {
   const authContext = requireAuthenticated(request);
   const profileRef = getDb().doc(`users/${authContext.uid}`);
   const profileSnapshot = await profileRef.get();
-  if (profileSnapshot.exists) return { user: { ...profileSnapshot.data(), id: authContext.uid, firebaseUid: authContext.uid } };
+  if (profileSnapshot.exists) {
+    const profile = profileSnapshot.data()!;
+    await transactionActor(getDb(), request);
+    const account = (await getDb().doc(`branch_accounts/${authContext.uid}`).get()).data();
+    const rbacTier = authContext.token.role === 'admin' ? 'SUPER_ADMIN'
+      : account?.branchId === authContext.token.branchId && account?.isActive === true
+      ? (account.role === 'Branch Manager' ? 'BRANCH_MANAGER' : 'BRANCH_STAFF')
+      : profile.rbacTier || 'BRANCH_STAFF';
+    return { user: { ...profile, rbacTier, id: authContext.uid, firebaseUid: authContext.uid } };
+  }
 
   const email = authContext.token.email;
   if (typeof email !== 'string') throw new HttpsError('failed-precondition', 'The Firebase account has no email address.');
@@ -179,6 +195,7 @@ export const resolveMyProfile = onCall(async (request) => {
 
   const legacyProfile = legacySnapshot.docs[0].data();
   const claims = authContext.token;
+  if (!['admin', 'branch'].includes(String(claims.role))) throw new HttpsError('permission-denied', 'An administrator must link this account before sign-in.');
   const migratedProfile = {
     ...legacyProfile,
     id: authContext.uid,
@@ -192,7 +209,7 @@ export const resolveMyProfile = onCall(async (request) => {
 });
 
 export const resetUserPassword = onCall(async (request) => {
-  requireAdmin(request);
+  await requireAdmin(request);
   const accountId = getString((request.data as { accountId?: unknown } | undefined)?.accountId, 'Account', 128);
   const accountSnapshot = await getDb().doc(`branch_accounts/${accountId}`).get();
   if (!accountSnapshot.exists) throw new HttpsError('not-found', 'The account does not exist.');
@@ -203,7 +220,7 @@ export const resetUserPassword = onCall(async (request) => {
 });
 
 export const updateUserAccess = onCall(async (request) => {
-  requireAdmin(request);
+  await requireAdmin(request);
   const payload = (request.data || {}) as { userId?: unknown; role?: unknown; branchId?: unknown };
   const userId = getString(payload.userId, 'User', 128);
   const role = payload.role === 'admin' || payload.role === 'branch' ? payload.role : null;
@@ -222,23 +239,38 @@ export const updateUserAccess = onCall(async (request) => {
     }
   }
 
+  if (targetUid === request.auth?.uid) throw new HttpsError('permission-denied', 'Ask another administrator to change your own access.');
+
   const branchSnapshot = branchId ? await getDb().doc(`branches/${branchId}`).get() : null;
   if (branchId && !branchSnapshot?.exists) throw new HttpsError('not-found', 'The selected branch does not exist.');
 
-  await getAdminAuth().setCustomUserClaims(targetUid, {
-    role: normalizedProfileRole(role),
-    ...(branchId ? { branchId } : {}),
-  });
+  const previousAuth = await getAdminAuth().getUser(targetUid);
+  const accountRef = getDb().doc(`branch_accounts/${targetUid}`);
+  const previousAccount = (await accountRef.get()).data();
+  const branchRole = previousAccount?.role || 'Staff';
   const updatedProfile: Record<string, unknown> = {
     ...profileData,
     id: targetUid,
     firebaseUid: targetUid,
     role: normalizedProfileRole(role),
+    rbacTier: role === 'admin' ? 'SUPER_ADMIN' : branchRole === 'Branch Manager' ? 'BRANCH_MANAGER' : 'BRANCH_STAFF',
     branchName: branchId ? branchSnapshot?.data()?.name || '' : 'Central Commissary HQ',
     updatedAt: new Date().toISOString(),
   };
   if (branchId) updatedProfile.branchId = branchId;
   else delete updatedProfile.branchId;
-  await getDb().doc(`users/${targetUid}`).set(updatedProfile);
+  await getAdminAuth().setCustomUserClaims(targetUid, { role, ...(branchId ? { branchId } : {}) });
+  try {
+    const batch = getDb().batch();
+    batch.set(getDb().doc(`users/${targetUid}`), updatedProfile);
+    if (branchId) batch.set(accountRef, { ...previousAccount, id: targetUid, branchId, branchName: updatedProfile.branchName, role: branchRole, fullName: profileData.name || 'Branch user', email: profileData.email || '', isActive: profileData.isActive !== false, permissions: permissionsByRole[branchRole as AccountRole] || permissionsByRole.Staff, updatedAt: new Date().toISOString() }, { merge: true });
+    else if (previousAccount) batch.update(accountRef, { isActive: false, updatedAt: new Date().toISOString() });
+    const auditRef = getDb().collection('transaction_audit').doc();
+    batch.create(auditRef, { id: auditRef.id, action: 'user.access', actorUid: request.auth!.uid, targetUid, branchId: branchId || '', role, timestamp: new Date().toISOString() });
+    await batch.commit();
+  } catch {
+    await getAdminAuth().setCustomUserClaims(targetUid, previousAuth.customClaims || {}).catch(() => undefined);
+    throw new HttpsError('unavailable', 'Access changes could not be saved. Check the account before retrying.');
+  }
   return { user: updatedProfile };
 });

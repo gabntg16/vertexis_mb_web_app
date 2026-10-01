@@ -1,3 +1,5 @@
+import { PACKAGE_PRICES } from '../../../functions/src/transactionModel';
+import { PaymentProofImage } from '../common/PaymentProofImage';
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import { ListSkeletonItem, EmptyStateBanner } from '../common/SkeletonLoaders';
@@ -46,9 +48,9 @@ export interface PackageTier {
 }
 
 export const PACKAGE_TIERS: PackageTier[] = [
-  { id: 'silver', name: 'Silver', price: 3999, baseCapacity: 35, maxCap: 54, rangeLabel: '35 - 54 packs' },
-  { id: 'gold', name: 'Gold', price: 5775, baseCapacity: 55, maxCap: 69, rangeLabel: '55 - 69 packs' },
-  { id: 'platinum', name: 'Platinum', price: 7000, baseCapacity: 70, maxCap: 999, rangeLabel: '70+ packs' },
+  { id: 'silver', ...PACKAGE_PRICES.silver, rangeLabel: '35 - 54 packs' },
+  { id: 'gold', ...PACKAGE_PRICES.gold, rangeLabel: '55 - 69 packs' },
+  { id: 'platinum', ...PACKAGE_PRICES.platinum, rangeLabel: '70+ packs' },
 ];
 
 export function calculatePackagePrice(tier: PackageTier, totalPacks: number): {
@@ -72,7 +74,7 @@ export function calculatePackagePrice(tier: PackageTier, totalPacks: number): {
   }
 
   const excessPacks = totalPacks - tier.baseCapacity;
-  const totalPrice = tier.price + excessPacks * ratePerPack;
+  const totalPrice = Math.round((tier.price + excessPacks * ratePerPack) * 100) / 100;
   return { totalPrice, isExceeded: true, excessPacks, ratePerPack };
 }
 
@@ -125,6 +127,7 @@ export const BranchOrders: React.FC = () => {
   const {
     products,
     currentBranch,
+    currentUser,
     createOrder,
     uploadPaymentProof,
     getOrdersForBranch,
@@ -137,6 +140,8 @@ export const BranchOrders: React.FC = () => {
 
   const [selectedTierId, setSelectedTierId] = useState<'silver' | 'gold' | 'platinum'>('gold');
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [savingOrder, setSavingOrder] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [selectedOrderForProof, setSelectedOrderForProof] = useState<Order | null>(null);
   const [orderSuccessMsg, setOrderSuccessMsg] = useState<string | null>(null);
   const [historyTab, setHistoryTab] = useState<'all' | 'active' | 'completed'>('all');
@@ -145,7 +150,16 @@ export const BranchOrders: React.FC = () => {
   const [activeTrackingNumber, setActiveTrackingNumber] = useState<string | null>(null);
   const [activeTrackingOrderId, setActiveTrackingOrderId] = useState<string | null>(null);
 
-  if (!currentBranch) return null;
+  if (!currentBranch) return (
+    <div role={syncState.error ? 'alert' : 'status'} className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+      <p className="font-bold">Orders are waiting for your branch data</p>
+      <p className="mt-2">{!currentUser?.branchId
+        ? 'Your account has no assigned branch. Ask HQ to assign your manager account to a branch.'
+        : syncState.error || (syncState.status === 'connected'
+          ? 'Your assigned branch was not found. Ask HQ to check your branch assignment.'
+          : 'Connecting to your branch. Orders will appear automatically when the connection recovers.')}</p>
+    </div>
+  );
 
   const branchId = currentBranch.id;
   const branchOrders = getOrdersForBranch(branchId);
@@ -382,7 +396,9 @@ export const BranchOrders: React.FC = () => {
     setQuantities(adjusted);
   };
 
-  const handleInlinePlacePackageOrder = () => {
+  const handleInlinePlacePackageOrder = async () => {
+    if (savingOrder) return;
+    setSaveError('');
     if (totalPacks < currentTier.baseCapacity) return;
 
     if (totalPacks > currentTier.maxCap) {
@@ -409,7 +425,9 @@ export const BranchOrders: React.FC = () => {
       ? `${currentTier.name} Package (+${excessPacks} excess packs)`
       : `${currentTier.name} Package`;
 
-    const newOrd = createOrder(orderItems, totalPrice, packageName, currentTier.id);
+    setSavingOrder(true);
+    let newOrd: Order | null;
+    try { newOrd = await createOrder(orderItems, totalPrice, packageName, currentTier.id); } catch (error) { setSaveError(error instanceof Error ? error.message : 'Order could not be saved.'); return; } finally { setSavingOrder(false); }
     if (newOrd) {
       setQuantities({});
       setOrderSuccessMsg(
@@ -712,9 +730,10 @@ export const BranchOrders: React.FC = () => {
             </div>
 
             <div className="flex items-center space-x-3">
+              {saveError && <p role="alert" className="p-3 text-sm text-red-700 dark:text-red-300">{saveError}</p>}
               <button
                 onClick={handleInlinePlacePackageOrder}
-                disabled={isBelowBase}
+                disabled={isBelowBase || savingOrder}
                 className={`px-6 py-3 rounded-2xl text-xs font-bold uppercase tracking-wider shadow-md transition-all flex items-center space-x-2 ${
                   !isBelowBase
                     ? 'bg-[#F37021] hover:bg-[#e06214] text-white active:scale-95 cursor-pointer'
@@ -1028,15 +1047,10 @@ export const BranchOrders: React.FC = () => {
                     )}
 
                     {ord.proofImagePath && (
-                      <a
-                        href={ord.proofImagePath}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-500 hover:text-[#80C7F2] transition-colors"
-                        title="View uploaded proof"
-                      >
-                        <ImageIcon className="w-4 h-4" />
-                      </a>
+                      <details className="w-full rounded-xl border border-neutral-200 p-3 dark:border-neutral-700">
+                        <summary className="cursor-pointer text-sm font-semibold">View uploaded proof</summary>
+                        <PaymentProofImage src={ord.proofImagePath} alt="Uploaded payment receipt" className="mt-3 max-h-72 w-full object-contain" />
+                      </details>
                     )}
                   </div>
                 </div>
@@ -1215,8 +1229,8 @@ export const BranchOrders: React.FC = () => {
           branchName={currentBranch.name}
           themeMode={themeMode}
           onClose={() => setSelectedOrderForProof(null)}
-          onPaymentComplete={(proofUrl, details) => {
-            uploadPaymentProof(selectedOrderForProof.id, proofUrl, details);
+          onPaymentComplete={async (proofUrl, details) => {
+            await uploadPaymentProof(selectedOrderForProof.id, proofUrl, details);
             setSelectedOrderForProof(null);
             setOrderSuccessMsg(
               `Payment verification submitted for Order #${selectedOrderForProof.id} via ${details.paymentMethod.toUpperCase()}${

@@ -1,3 +1,4 @@
+import { PACKAGE_PRICES } from '../../../functions/src/transactionModel';
 import React, { useState, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { Minus, Plus, X, AlertCircle } from 'lucide-react';
@@ -16,9 +17,9 @@ export interface PackageTier {
 }
 
 export const PACKAGE_TIERS: PackageTier[] = [
-  { id: 'silver', name: 'Silver', price: 3999, baseCapacity: 35, maxCap: 54, rangeLabel: '35 - 54 packs' },
-  { id: 'gold', name: 'Gold', price: 5775, baseCapacity: 55, maxCap: 69, rangeLabel: '55 - 69 packs' },
-  { id: 'platinum', name: 'Platinum', price: 7000, baseCapacity: 70, maxCap: 999, rangeLabel: '70+ packs' },
+  { id: 'silver', ...PACKAGE_PRICES.silver, rangeLabel: '35 - 54 packs' },
+  { id: 'gold', ...PACKAGE_PRICES.gold, rangeLabel: '55 - 69 packs' },
+  { id: 'platinum', ...PACKAGE_PRICES.platinum, rangeLabel: '70+ packs' },
 ];
 
 /**
@@ -46,7 +47,7 @@ export function calculatePackagePrice(tier: PackageTier, totalPacks: number): {
   }
 
   const excessPacks = totalPacks - tier.baseCapacity;
-  const totalPrice = tier.price + excessPacks * ratePerPack;
+  const totalPrice = Math.round((tier.price + excessPacks * ratePerPack) * 100) / 100;
 
   return {
     totalPrice,
@@ -73,6 +74,8 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
 
   const [selectedTierId, setSelectedTierId] = useState<'silver' | 'gold' | 'platinum'>(initialTierId);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [savingOrder, setSavingOrder] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [exceedWarning, setExceedWarning] = useState<PackageExceedWarningDetails | null>(null);
   const [isUpgradeCautionDismissed, setIsUpgradeCautionDismissed] = useState(false);
 
@@ -230,7 +233,9 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
     setQuantities(adjusted);
   };
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
+    if (savingOrder) return;
+    setSaveError('');
     if (totalPacks < currentTier.baseCapacity) return;
 
     if (totalPacks > currentTier.maxCap) {
@@ -257,12 +262,14 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
       ? `${currentTier.name} Package (+${excessPacks} excess packs)`
       : `${currentTier.name} Package`;
 
-    const newOrder = createOrder(
+    setSavingOrder(true);
+    let newOrder: Order | null;
+    try { newOrder = await createOrder(
       orderItems,
       totalPrice,
       packageName,
       currentTier.id
-    );
+    ); } catch (error) { setSaveError(error instanceof Error ? error.message : 'Order could not be saved.'); return; } finally { setSavingOrder(false); }
 
     if (newOrder) {
       if (onOrderCreated) {
@@ -447,10 +454,11 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
               </p>
             </div>
 
-            <button
+            {saveError && <p role="alert" className="p-3 text-sm text-red-700 dark:text-red-300">{saveError}</p>}
+              <button
               type="button"
               onClick={handlePlaceOrder}
-              disabled={isBelowBase}
+              disabled={isBelowBase || savingOrder}
               className={`px-7 py-3.5 rounded-2xl text-sm font-bold text-white shadow-md transition-all text-center leading-tight ${
                 !isBelowBase
                   ? 'bg-[#F37021] hover:bg-[#e06214] active:scale-95 cursor-pointer'

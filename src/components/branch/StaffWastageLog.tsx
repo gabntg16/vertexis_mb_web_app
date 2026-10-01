@@ -1,3 +1,4 @@
+import { businessDate } from '../../../functions/src/transactionModel';
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import {
@@ -70,7 +71,7 @@ export const StaffWastageLog: React.FC<StaffWastageLogProps> = ({ onNavigateTab 
 
   const isDark = themeMode === 'dark';
   const branchId = currentUser?.branchId || currentBranch?.id || 'b-legazpi';
-  const today = new Date().toISOString().split('T')[0];
+  const today = businessDate();
 
   const todayLog = useMemo(() => {
     return (dailyShiftLogs || []).find((l) => l.branchId === branchId && l.date === today);
@@ -100,15 +101,16 @@ export const StaffWastageLog: React.FC<StaffWastageLogProps> = ({ onNavigateTab 
   const handleOpenConfirm = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isEditable) return;
-    if (quantity <= 0) {
+    if (!currentProduct || !Number.isSafeInteger(quantity) || quantity <= 0) {
       setFeedback({ text: 'Please enter a valid wastage quantity greater than 0.', type: 'error' });
       return;
     }
     setShowConfirmModal(true);
   };
 
-  const handleConfirmLogSpoilage = () => {
-    const res = addSpoilageToDailyLog({
+  const handleConfirmLogSpoilage = async () => {
+    if (!currentProduct) return;
+    const res = await addSpoilageToDailyLog({
       productId: currentProduct.id,
       productName: currentProduct.name,
       flavor: currentProduct.flavor,
@@ -138,9 +140,10 @@ export const StaffWastageLog: React.FC<StaffWastageLogProps> = ({ onNavigateTab 
     setEntryToDelete({ id: entryId, flavor });
   };
 
-  const handleConfirmDeleteEntry = () => {
+  const handleConfirmDeleteEntry = async () => {
     if (!entryToDelete) return;
-    removeSpoilageFromDailyLog(entryToDelete.id);
+    const result = await removeSpoilageFromDailyLog(entryToDelete.id);
+    if (!result.success) { setFeedback({ text: result.error || 'The entry could not be removed.', type: 'error' }); return; }
     setFeedback({ text: `Removed wastage entry for ${entryToDelete.flavor}.`, type: 'info' });
     setEntryToDelete(null);
     setTimeout(() => setFeedback(null), 3000);

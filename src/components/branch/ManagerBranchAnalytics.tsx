@@ -29,6 +29,8 @@ export const ManagerBranchAnalytics: React.FC<ManagerBranchAnalyticsProps> = ({
     currentUser,
     currentBranch,
     dailyShiftLogs,
+    sales,
+    spoilageRecords,
     inventory,
     products,
     themeMode,
@@ -56,12 +58,10 @@ export const ManagerBranchAnalytics: React.FC<ManagerBranchAnalyticsProps> = ({
     let totalSpoilageUnits = 0;
     let totalSpoilageCost = 0;
 
-    branchLogs.forEach((log) => {
-      totalRevenue += log.totalSalesRevenue || 0;
-      totalUnitsSold += log.totalSalesUnits || 0;
-      totalSpoilageUnits += log.totalSpoilageUnits || 0;
-      totalSpoilageCost += log.totalSpoilageCost || 0;
-    });
+    const cutoff = new Date(); cutoff.setHours(0, 0, 0, 0); cutoff.setDate(cutoff.getDate() - 6);
+    const recent = (value: string) => new Date(value) >= cutoff && new Date(value) <= new Date();
+    sales.filter(s => s.branchId === branchId && s.status !== 'voided' && s.status !== 'refunded' && recent(s.date)).forEach(s => { totalRevenue += s.total; totalUnitsSold += s.quantity; });
+    spoilageRecords.filter(w => w.branchId === branchId && recent(w.timestamp)).forEach(w => { totalSpoilageUnits += w.quantity; totalSpoilageCost += w.costImpact; });
 
     const lowStockItems = branchInventory.filter((i) => (i.currentStock ?? i.stock) <= (i.minThreshold ?? 0));
 
@@ -73,7 +73,7 @@ export const ManagerBranchAnalytics: React.FC<ManagerBranchAnalyticsProps> = ({
       lowStockCount: lowStockItems.length,
       lowStockItems,
     };
-  }, [branchLogs, branchInventory]);
+  }, [sales, spoilageRecords, branchId, branchInventory]);
 
   return (
     <div id="manager-branch-analytics-view" className="space-y-6">
@@ -114,7 +114,7 @@ export const ManagerBranchAnalytics: React.FC<ManagerBranchAnalyticsProps> = ({
           <div className="mt-2 text-2xl font-black text-emerald-600 dark:text-emerald-400">
             ₱{performanceMetrics.totalRevenue.toLocaleString()}
           </div>
-          <p className="text-[11px] text-neutral-400 mt-1">Logged from {branchLogs.length} shifts</p>
+          <p className="text-[11px] text-neutral-400 mt-1">Recorded sales ? last 7 days</p>
         </div>
 
         <div className="p-4 rounded-2xl bg-white dark:bg-[#181818] border border-neutral-200 dark:border-neutral-800 shadow-xs">

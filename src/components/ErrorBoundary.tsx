@@ -17,12 +17,6 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   public static getDerivedStateFromError(error: Error): State {
-    const isExtension = /MetaMask|ethereum|inpage|chrome-extension|moz-extension|safari-extension|Extension context/i.test(
-      error?.message || ''
-    );
-    if (isExtension) {
-      return { hasError: false, error: null };
-    }
     return { hasError: true, error };
   }
 

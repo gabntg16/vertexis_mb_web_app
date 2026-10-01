@@ -34,13 +34,13 @@ export const ListSkeletonItem: React.FC<{ isDark?: boolean }> = ({ isDark }) => 
 );
 
 export const EmptyStateBanner: React.FC<{ title: string; message: string; icon: React.ReactNode; isDark?: boolean }> = ({ title, message, icon, isDark }) => (
-  <div className={`flex flex-col items-center justify-center p-8 rounded-2xl border text-center transition-all ${
+  <div role="status" className={`flex flex-col items-center justify-center px-6 py-10 sm:py-14 rounded-2xl border text-center transition-all ${
     isDark ? 'bg-neutral-900/40 border-neutral-800 text-neutral-400' : 'bg-neutral-50/50 border-neutral-200 text-neutral-500'
   }`}>
     <div className={`p-3 rounded-full mb-3 ${isDark ? 'bg-neutral-800 text-neutral-500' : 'bg-neutral-200 text-neutral-400'}`}>
       {icon}
     </div>
     <h3 className={`text-sm font-bold mb-1 ${isDark ? 'text-neutral-300' : 'text-neutral-700'}`}>{title}</h3>
-    <p className="text-[11px] max-w-[250px] leading-relaxed">{message}</p>
+    <p className="text-sm max-w-sm leading-relaxed">{message}</p>
   </div>
 );

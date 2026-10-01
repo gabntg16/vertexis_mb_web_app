@@ -1,0 +1,30 @@
+{
+  "score": 3,
+  "summary": "Targeted rules hardening and seven emulator checks passed. This assessment covers the changed source, not deployed production rules. Legacy sensitive data and remaining validation gaps prevent a secure certification.",
+  "findings": [
+    {
+      "check": "Field-level vs. identity-level security",
+      "severity": "moderate",
+      "issue": "Legacy inline payment proofs remain readable with their order documents; new proof documents are denied to direct clients and served through authorization checks.",
+      "recommendation": "Back up and migrate legacy proofs to private storage, remove inline proof fields, and test staff versus manager access before rollout."
+    },
+    {
+      "check": "Type safety and resource exhaustion",
+      "severity": "minor",
+      "issue": "Some admin-managed metadata collections retain broad validators and history queries lack pagination.",
+      "recommendation": "Add collection-specific field/type/size limits and bounded pagination while preserving valid existing schemas."
+    },
+    {
+      "check": "Business logic vs. rules",
+      "severity": "moderate",
+      "issue": "Legacy identity/scope fields and direct-write workflows may not satisfy the hardened rules. The local default-database emulator does not verify Enterprise named-database production behavior.",
+      "recommendation": "Validate existing records and all supported roles in staging; migrate legacy fields and implement outstanding backend workflows before enabling them."
+    },
+    {
+      "check": "Authority source",
+      "severity": "minor",
+      "issue": "Legacy client audit logs are not equivalent to the immutable server transaction audit and must not be trusted as authoritative financial history.",
+      "recommendation": "Use transaction_audit for financial evidence and migrate remaining important mutations to server-authored audit entries."
+    }
+  ]
+}

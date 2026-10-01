@@ -8,6 +8,7 @@ import {
   Moon,
   CloudCheck,
   CloudOff,
+  HardDrive,
   RefreshCw,
   LayoutDashboard,
   ShoppingBag,
@@ -36,6 +37,7 @@ import {
   LockKeyhole,
   FileText,
   Settings,
+  X,
 } from 'lucide-react';
 import { filterNotificationsForUser } from '../utils/notificationUtils';
 import { NotificationBadgeGroup } from './common/NotificationBadgeGroup';
@@ -44,18 +46,21 @@ import { isSuperAdmin, isBranchManager, isBranchStaff } from '../utils/securityV
 
 interface TopHeaderProps {
   activeTab: string;
+  isMobileOpen: boolean;
   onToggleMobileMenu: () => void;
   onNavigateTab?: (tab: string) => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
   activeTab,
+  isMobileOpen,
   onToggleMobileMenu,
   onNavigateTab,
 }) => {
   const {
     currentUser,
     currentBranch,
+    branches,
     themeMode,
     syncState,
     announcements,
@@ -69,8 +74,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<'all' | NotificationKind>('all');
 
-  if (!currentUser) return null;
-
   const isAdmin = isSuperAdmin(currentUser);
   const isDark = themeMode === 'dark';
   const isSettingsActive = ['account_settings', 'privacy_settings', 'legal_terms'].includes(activeTab);
@@ -82,6 +85,32 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     : 'staff_dashboard';
 
   const previousTabRef = useRef<string>(defaultTab);
+  const notificationRef = useRef<HTMLDivElement>(null);
+  const notificationButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!showNotificationMenu) return;
+    notificationRef.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowNotificationMenu(false);
+        notificationButtonRef.current?.focus();
+      }
+    };
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (event.target instanceof Node &&
+          !notificationRef.current?.contains(event.target) &&
+          !notificationButtonRef.current?.contains(event.target)) {
+        setShowNotificationMenu(false);
+      }
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape);
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+    };
+  }, [showNotificationMenu]);
 
   useEffect(() => {
     if (!['account_settings', 'privacy_settings', 'legal_terms'].includes(activeTab)) {
@@ -104,8 +133,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
   // Count unread notifications
   const unreadCount = useMemo(() => {
-    return userNotifications.filter((a) => !a.readBy?.includes(currentUser.id)).length;
-  }, [userNotifications, currentUser.id]);
+    return userNotifications.filter((a) => !a.readBy?.includes(currentUser?.id ?? '')).length;
+  }, [userNotifications, currentUser?.id]);
 
   // Apply popover category filter
   const displayedNotifications = useMemo(() => {
@@ -113,12 +142,14 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     return userNotifications.filter((a) => a.kind === activeCategoryFilter);
   }, [userNotifications, activeCategoryFilter]);
 
+  if (!currentUser) return null;
+
   const handleManualSync = async () => {
     try {
       setIsManualSyncing(true);
       await forceSyncCloud();
     } finally {
-      setTimeout(() => setIsManualSyncing(false), 600);
+      setIsManualSyncing(false);
     }
   };
 
@@ -151,8 +182,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       icon: FileCheck,
     },
     log_validation: {
-      title: 'Daily Log Validation & Audit',
-      subtitle: 'Audit staff physical counts, sales, wastage and lock daily records',
+      title: 'Staff & Receiving Approvals',
+      subtitle: 'Review inbound stock, shift counts, sales, and wastage',
       icon: ShieldCheck,
     },
     requisitions: {
@@ -210,7 +241,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       icon: ChefHat,
     },
     branches: {
-      title: '19 Nationwide Branches',
+      title: `${branches.length} Nationwide ${branches.length === 1 ? 'Branch' : 'Branches'}`,
       subtitle: 'Centralized franchise performance & stock tracking',
       icon: Building2,
     },
@@ -223,7 +254,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     },
     deliveries: {
       title: 'Inbound Deliveries & Receiving',
-      subtitle: 'Confirm received stock dispatched from central commissary',
+      subtitle: 'Review received quantities and approve additions to branch stock',
       icon: PackageCheck,
     },
     sales: {
@@ -266,6 +297,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       subtitle: "Today's shift, receiving, counts, and sales workbench",
       icon: LayoutDashboard,
     },
+    current_stock: {
+      title: 'Current Branch Stock',
+      subtitle: 'Review available stock and inventory levels at your branch',
+      icon: Boxes,
+    },
     account_settings: {
       title: 'Account Settings',
       subtitle: 'Review your profile, role, and assigned operating scope',
@@ -294,7 +330,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   return (
     <header className="mallow-header sticky top-0 z-20 border-b backdrop-blur-md transition-colors">
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 gap-3">
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between min-h-16 gap-2 py-3">
           
           {/* Left: Mobile Menu Trigger & Active Context Header */}
           <div className="flex items-center space-x-3 min-w-0">
@@ -304,6 +340,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               onClick={onToggleMobileMenu}
               className="lg:hidden p-2 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors shrink-0"
               title="Open Navigation Menu"
+              aria-label="Open navigation"
+              aria-expanded={isMobileOpen}
+              aria-controls={isMobileOpen ? 'mobile-navigation' : undefined}
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -314,7 +353,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 <TabIcon className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <h1 className="font-extrabold text-sm sm:text-base text-neutral-900 dark:text-white truncate leading-tight">
+                <h1 className="font-extrabold text-sm sm:text-base text-neutral-900 dark:text-white leading-snug">
                   {currentTabMeta.title}
                 </h1>
                 <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate hidden sm:block">
@@ -325,24 +364,29 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           </div>
 
           {/* Right Action Bar */}
-          <div className="mallow-header-actions flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+          <div className="mallow-header-actions ml-auto flex items-center space-x-1.5 sm:space-x-2 shrink-0">
             {/* Cloud Firestore Status Badge */}
             <button
               id="top-firestore-sync-btn"
               onClick={handleManualSync}
+              disabled={isManualSyncing || syncState.status === 'syncing'}
+              aria-label={`${syncState.error ? 'Sync needs attention' : isManualSyncing || syncState.status === 'syncing' ? 'Syncing' : syncState.status === 'local' ? 'Local mode' : syncState.status === 'connected' ? 'Synced' : 'Offline'}. Refresh sync status`}
               className={`mallow-header-control flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
-                syncState.status === 'connected'
+                syncState.error
+                  ? 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
+                  : syncState.status === 'connected' && !isManualSyncing
                   ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20'
                   : syncState.status === 'syncing' || isManualSyncing
                   ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
                   : 'bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-500'
               }`}
-              title="Firestore Cloud Sync Status. Click to force sync."
+              title={syncState.error || (syncState.status === 'local' ? 'Using local data saved in this browser. Click to save.' : 'Sync status. Click to refresh.')}
             >
-              {syncState.status === 'connected' && !isManualSyncing ? (
+              {syncState.status === 'local' && !isManualSyncing ? (
+                <><HardDrive className="w-3.5 h-3.5" /><span className="hidden md:inline">Local mode</span></>
+              ) : syncState.status === 'connected' && !isManualSyncing ? (
                 <>
                   <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
                   <CloudCheck className="w-3.5 h-3.5" />
@@ -356,7 +400,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               ) : (
                 <>
                   <CloudOff className="w-3.5 h-3.5 text-neutral-400" />
-                  <span className="hidden md:inline">Offline</span>
+                  <span className="hidden md:inline">{syncState.error || syncState.status === 'error' ? 'Needs attention' : 'Reconnecting...'}</span>
                 </>
               )}
             </button>
@@ -365,6 +409,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <div className="relative">
               <button
                 id="top-notifications-btn"
+                ref={notificationButtonRef}
+                aria-label={`Notifications, ${unreadCount} unread`}
+                aria-expanded={showNotificationMenu}
+                aria-controls={showNotificationMenu ? 'notification-panel' : undefined}
                 onClick={() => setShowNotificationMenu(!showNotificationMenu)}
                 className={`mallow-header-control relative p-2 rounded-xl border transition-colors ${
                   showNotificationMenu
@@ -387,10 +435,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
               {showNotificationMenu && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowNotificationMenu(false)} />
-                  <div className="absolute right-0 mt-2 w-80 sm:w-[420px] max-h-[500px] flex flex-col rounded-2xl shadow-2xl border z-50 bg-white dark:bg-[#1c1c1c] border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white overflow-hidden">
+                  <div id="notification-panel" ref={notificationRef} role="region" aria-label="Notifications and alerts" tabIndex={-1} className="fixed inset-x-3 top-28 sm:absolute sm:inset-x-auto sm:top-full sm:right-0 mt-2 sm:w-[420px] max-h-[min(500px,calc(100dvh-8rem))] flex flex-col rounded-2xl shadow-2xl border z-50 bg-white dark:bg-[#1c1c1c] border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white overflow-hidden">
                     {/* Popover Header */}
-                    <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/70 dark:bg-neutral-900/50">
+                    <div className="shrink-0 p-3 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/70 dark:bg-neutral-900/50">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
                           <span className="p-1 rounded-lg bg-[#F37021]/15 text-[#F37021]">
@@ -406,6 +453,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                           </div>
                         </div>
 
+                        <button type="button" aria-label="Close notifications" className="p-2 rounded-lg hover:bg-neutral-200 dark:hover:bg-neutral-800" onClick={() => {
+                          setShowNotificationMenu(false);
+                          notificationButtonRef.current?.focus();
+                        }}><X className="h-4 w-4" /></button>
                         {unreadCount > 0 && (
                           <button
                             onClick={() => markAllAnnouncementsAsRead()}
@@ -422,6 +473,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                       <div className="flex items-center space-x-1.5 mt-2.5 overflow-x-auto pb-1 text-[10.5px] scrollbar-none">
                         <button
                           onClick={() => setActiveCategoryFilter('all')}
+                          aria-pressed={activeCategoryFilter === 'all'}
                           className={`px-2 py-0.5 rounded-lg font-bold shrink-0 transition-colors ${
                             activeCategoryFilter === 'all'
                               ? 'bg-[#80C7F2] text-neutral-900 shadow-xs'
@@ -432,6 +484,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                         </button>
                         <button
                           onClick={() => setActiveCategoryFilter('order')}
+                          aria-pressed={activeCategoryFilter === 'order'}
                           className={`px-2 py-0.5 rounded-lg font-medium shrink-0 transition-colors ${
                             activeCategoryFilter === 'order'
                               ? 'bg-blue-600 text-white shadow-xs'
@@ -442,6 +495,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                         </button>
                         <button
                           onClick={() => setActiveCategoryFilter('logistics')}
+                          aria-pressed={activeCategoryFilter === 'logistics'}
                           className={`px-2 py-0.5 rounded-lg font-medium shrink-0 transition-colors ${
                             activeCategoryFilter === 'logistics'
                               ? 'bg-sky-600 text-white shadow-xs'
@@ -452,6 +506,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                         </button>
                         <button
                           onClick={() => setActiveCategoryFilter('production')}
+                          aria-pressed={activeCategoryFilter === 'production'}
                           className={`px-2 py-0.5 rounded-lg font-medium shrink-0 transition-colors ${
                             activeCategoryFilter === 'production'
                               ? 'bg-amber-600 text-white shadow-xs'
@@ -462,6 +517,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                         </button>
                         <button
                           onClick={() => setActiveCategoryFilter('inventory')}
+                          aria-pressed={activeCategoryFilter === 'inventory'}
                           className={`px-2 py-0.5 rounded-lg font-medium shrink-0 transition-colors ${
                             activeCategoryFilter === 'inventory'
                               ? 'bg-rose-600 text-white shadow-xs'
@@ -472,6 +528,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                         </button>
                         <button
                           onClick={() => setActiveCategoryFilter('general')}
+                          aria-pressed={activeCategoryFilter === 'general'}
                           className={`px-2 py-0.5 rounded-lg font-medium shrink-0 transition-colors ${
                             activeCategoryFilter === 'general'
                               ? 'bg-neutral-700 text-white shadow-xs'
@@ -484,7 +541,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     </div>
 
                     {/* Notification Items List */}
-                    <div className="space-y-2 p-3 max-h-80 overflow-y-auto">
+                    <div className="min-h-0 space-y-2 p-3 max-h-80 overflow-y-auto overscroll-contain">
                       {displayedNotifications.length === 0 ? (
                         <div className="py-8 text-center text-neutral-400">
                           <Bell className="w-6 h-6 mx-auto mb-1.5 opacity-30" />
@@ -528,6 +585,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                               <p className="text-[11px] text-neutral-600 dark:text-neutral-300 mt-1 leading-relaxed line-clamp-2">
                                 {ann.message}
                               </p>
+                              {!isRead && (
+                                <button type="button" className="mt-2 text-xs font-semibold text-[#1a7bb5] dark:text-[#80C7F2] hover:underline" onClick={(event) => {
+                                  event.stopPropagation();
+                                  markAnnouncementAsRead(ann.id);
+                                }} aria-label={`Mark ${ann.title} as read`}>Mark as read</button>
+                              )}
 
                               {/* Footer Details: Author & Timestamp */}
                               <div className="flex items-center justify-between text-[9.5px] text-neutral-400 mt-2 pt-1.5 border-t border-neutral-200/60 dark:border-neutral-800">
@@ -570,11 +633,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     </div>
 
                     {/* Popover Footer Link */}
-                    <div className="p-2.5 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50/70 dark:bg-neutral-900/50 flex items-center justify-between text-xs">
+                    <div className="shrink-0 p-2.5 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50/70 dark:bg-neutral-900/50 flex items-center justify-between text-xs">
                       <span className="text-[10px] text-neutral-400">
                         {userNotifications.length} total alerts for you
                       </span>
-                      {onNavigateTab && (
+                      {onNavigateTab && isAdmin && (
                         <button
                           onClick={() => {
                             setShowNotificationMenu(false);
@@ -597,6 +660,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               onClick={toggleTheme}
               className="mallow-header-control p-2 rounded-xl border transition-colors bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-amber-300 hover:bg-neutral-200 dark:hover:bg-neutral-700"
               title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
             </button>

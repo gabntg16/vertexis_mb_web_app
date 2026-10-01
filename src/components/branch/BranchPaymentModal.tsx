@@ -1,679 +1,132 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { X, Upload, AlertCircle, ReceiptText, Smartphone, Landmark, ShieldCheck, Check } from 'lucide-react';
 import { Order, DigitalPaymentMethod, PaymentGatewayStatus } from '../../types';
-import {
-  COMMISSARY_BANK_ACCOUNTS,
-  COMMISSARY_DIGITAL_WALLETS,
-} from '../../services/paymentGateway';
 import { validateUploadedFile } from '../../utils/fileValidation';
-import {
-  X,
-  Smartphone,
-  Building2,
-  Copy,
-  Check,
-  ShieldCheck,
-  AlertCircle,
-  CheckCircle2,
-  Upload,
-  Info,
-  Receipt,
-  FileText,
-  Image as ImageIcon,
-  Trash2,
-} from 'lucide-react';
 
 interface BranchPaymentModalProps {
   order: Order;
   branchName: string;
   themeMode: 'light' | 'dark';
   onClose: () => void;
-  onPaymentComplete: (
-    proofUrl: string,
-    paymentDetails: {
-      paymentMethod: DigitalPaymentMethod | string;
-      paymentIntentId?: string;
-      referenceNumber?: string;
-      status: PaymentGatewayStatus;
-    }
-  ) => void;
+  onPaymentComplete: (proof: string, details: {
+    paymentMethod: DigitalPaymentMethod | string;
+    referenceNumber?: string;
+    status: PaymentGatewayStatus;
+  }) => void | Promise<void>;
 }
 
-export const BranchPaymentModal: React.FC<BranchPaymentModalProps> = ({
-  order,
-  branchName,
-  themeMode,
-  onClose,
-  onPaymentComplete,
-}) => {
-  const isDark = themeMode === 'dark';
-
-  // Manual payment method selection
-  const [selectedMethod, setSelectedMethod] = useState<'gcash' | 'maya' | 'bank_transfer'>('gcash');
-  const [selectedBankIndex, setSelectedBankIndex] = useState(0);
-
-  // Manual Proof of Payment fields
-  const [manualReference, setManualReference] = useState('');
-  const [proofUrlInput, setProofUrlInput] = useState('');
-  const [showUrlFallback, setShowUrlFallback] = useState(false);
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-
-  // File Upload & Validation state
-  const [isValidatingFile, setIsValidatingFile] = useState(false);
-  const [validatedFileInfo, setValidatedFileInfo] = useState<{
-    fileName: string;
-    fileSize: number;
-    mimeType: string;
-    previewUrl?: string;
-  } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Notification Banner
-  const [toastMessage, setToastMessage] = useState<{
-    type: 'success' | 'error' | 'info';
-    text: string;
-  } | null>(null);
-
-  const copyToClipboard = (text: string, fieldKey: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedField(fieldKey);
-    setTimeout(() => setCopiedField(null), 2500);
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+export const BranchPaymentModal: React.FC<BranchPaymentModalProps> = ({ order, branchName, themeMode, onClose, onPaymentComplete }) => {
+  const [method, setMethod] = useState<'gcash' | 'maya' | 'bank_transfer'>('gcash');
+  const [reference, setReference] = useState('');
+  const [proof, setProof] = useState('');
+  const [fileName, setFileName] = useState('');
+  const [error, setError] = useState('');
+  const [validating, setValidating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const busy = useRef(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    dialog.current?.focus();
+    return () => { document.body.style.overflow = previousOverflow; previous?.focus(); };
+  }, []);
+  const upload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
-
-    setIsValidatingFile(true);
-    setToastMessage({ type: 'info', text: 'Validating receipt file integrity...' });
-
+    setProof(''); setError(''); setFileName('');
+    setValidating(true);
     try {
-      const validation = await validateUploadedFile(file, {
-        maxSizeBytes: 15 * 1024 * 1024, // 15MB
-        allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
-        verifyImageDecodable: true,
-      });
-
-      if (!validation.isValid) {
-        setToastMessage({
-          type: 'error',
-          text: validation.error || 'File validation failed security check.',
-        });
-        setValidatedFileInfo(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        return;
-      }
-
-      const dataUrl = validation.dataUrl || '';
-      setProofUrlInput(dataUrl);
-      setValidatedFileInfo({
-        fileName: file.name,
-        fileSize: file.size,
-        mimeType: validation.detectedMimeType || file.type,
-        previewUrl: dataUrl.startsWith('data:image') ? dataUrl : undefined,
-      });
-
-      setToastMessage({
-        type: 'success',
-        text: `✓ File verified safe: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`,
-      });
-    } catch (err: any) {
-      setToastMessage({
-        type: 'error',
-        text: err?.message || 'Error processing uploaded file.',
-      });
-    } finally {
-      setIsValidatingFile(false);
-    }
+      const result = await validateUploadedFile(file, { maxSizeBytes: 650000, allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'], verifyImageDecodable: true });
+      if (!result.isValid || !result.dataUrl) throw new Error(result.error || 'Choose a readable receipt image.');
+      setProof(result.dataUrl); setFileName(file.name);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to read this file.'); }
+    finally { setValidating(false); if (fileInput.current) fileInput.current.value = ''; }
   };
-
-  const handleRemoveFile = () => {
-    setProofUrlInput('');
-    setValidatedFileInfo(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (busy.current || validating) return;
+    if (!proof || !reference.trim()) { setError('Add a receipt image and its transaction reference.'); return; }
+    busy.current = true; setSaving(true); setError('');
+    try { await onPaymentComplete(proof, { paymentMethod: method, referenceNumber: reference.trim(), status: 'PENDING' }); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'The receipt was not saved. Please retry.'); }
+    finally { busy.current = false; setSaving(false); }
   };
-
-  const handleSubmitProof = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualReference.trim()) {
-      setToastMessage({
-        type: 'error',
-        text: 'Please enter the transaction reference / trace number from your receipt.',
-      });
-      return;
-    }
-
-    if (!proofUrlInput.trim()) {
-      setToastMessage({
-        type: 'error',
-        text: 'Please upload a receipt screenshot or attach a valid proof URL.',
-      });
-      return;
-    }
-
-    onPaymentComplete(proofUrlInput.trim(), {
-      paymentMethod: selectedMethod,
-      referenceNumber: manualReference.trim(),
-      status: 'PENDING',
-    });
-  };
-
-  const totalPacks = order.items.reduce((sum, item) => sum + item.quantity, 0);
-  const activeBank = COMMISSARY_BANK_ACCOUNTS[selectedBankIndex] || COMMISSARY_BANK_ACCOUNTS[0];
-
+  const channels = [
+    { id: 'gcash', name: 'GCash', description: 'Corporate E-Wallet', icon: Smartphone, color: 'text-blue-500' },
+    { id: 'maya', name: 'Maya', description: 'Corporate Wallet', icon: Smartphone, color: 'text-emerald-500' },
+    { id: 'bank_transfer', name: 'Bank Transfer', description: 'Bank deposit / transfer', icon: Landmark, color: 'text-orange-500' },
+  ] as const;
+  const selectedChannel = channels.find(channel => channel.id === method)!;
+  const total = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(order.totalAmount);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-      <div
-        className={`relative w-full max-w-2xl rounded-3xl shadow-2xl border overflow-hidden flex flex-col max-h-[92vh] ${
-          isDark ? 'bg-[#181818] border-neutral-800 text-white' : 'bg-white border-neutral-200 text-neutral-900'
-        }`}
-      >
-        {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/80">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#F37021]/10 text-[#F37021] flex items-center justify-center flex-shrink-0">
-              <Receipt className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h3 className="text-base font-bold text-neutral-900 dark:text-white">
-                  Manual Proof of Payment (PoP) Verification
-                </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700">
-                  Manual Audit
-                </span>
-              </div>
-              <p className="text-xs text-neutral-500">
-                Order #{order.id} • {branchName}
-              </p>
-            </div>
+    <div className={`${themeMode === 'dark' ? 'dark ' : ''}fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm sm:p-6`}>
+      <div ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="payment-proof-title"
+        className="flex max-h-[92dvh] w-full max-w-md flex-col overflow-hidden rounded-[24px] border border-neutral-200 bg-white text-neutral-800 shadow-2xl outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+        onKeyDown={event => {
+          if (event.key === 'Escape' && !saving && !validating) onClose();
+          if (event.key === 'Tab') {
+            const items = dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled):not([type="file"]), select:not(:disabled)');
+            if (!items?.length) return;
+            const first = items[0], last = items[items.length - 1];
+            if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+          }
+        }}>
+        <header className="flex shrink-0 items-center gap-3 border-b border-neutral-200 bg-neutral-50 px-5 py-5 dark:border-neutral-700 dark:bg-neutral-900">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-orange-100/70 text-orange-500 dark:bg-orange-950"><ReceiptText size={20} /></span>
+          <div className="min-w-0 flex-1">
+            <h2 id="payment-proof-title" className="text-sm font-bold leading-5 sm:text-base">Manual Proof of Payment (PoP) Verification</h2>
+            <p className="mt-1 break-words text-xs leading-4 text-neutral-500 dark:text-neutral-400">Order #{order.id} &bull; {branchName}</p>
           </div>
-
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-xl text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Toast Alert Banner */}
-        {toastMessage && (
-          <div
-            className={`px-5 py-2.5 text-xs font-medium flex items-center justify-between transition-all ${
-              toastMessage.type === 'success'
-                ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 border-b border-emerald-200 dark:border-emerald-800'
-                : toastMessage.type === 'error'
-                ? 'bg-red-50 dark:bg-red-950/80 text-red-800 dark:text-red-200 border-b border-red-200 dark:border-red-800'
-                : 'bg-sky-50 dark:bg-sky-950/80 text-sky-800 dark:text-sky-200 border-b border-sky-200 dark:border-sky-800'
-            }`}
-          >
-            <div className="flex items-center space-x-2">
-              {toastMessage.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
-              {toastMessage.type === 'error' && <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />}
-              {toastMessage.type === 'info' && <Info className="w-4 h-4 text-sky-600 shrink-0" />}
-              <span>{toastMessage.text}</span>
+          <span className="rounded-full border border-neutral-200 bg-neutral-100 px-2 py-1 text-[10px] font-medium leading-3 dark:border-neutral-700 dark:bg-neutral-800">Manual<br />Audit</span>
+          <button type="button" onClick={onClose} disabled={saving || validating} aria-label="Close payment form" className="-mr-2 shrink-0 rounded-lg p-2 text-neutral-400 hover:bg-neutral-200 focus-visible:outline-2 focus-visible:outline-orange-500 dark:hover:bg-neutral-800"><X size={18} /></button>
+        </header>
+        <form onSubmit={submit} className="min-h-0 space-y-5 overflow-y-auto overscroll-contain p-5 [scrollbar-color:#bae6fd_transparent] [scrollbar-width:thin] sm:p-6">
+          <section aria-label="Order summary" className="space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-neutral-800/50">
+            <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">TOTAL PAYMENT DUE</span><strong className="text-xl font-bold">{total}</strong></div>
+            {order.packageName && <p className="text-xs font-semibold">{order.packageName}</p>}
+            <div className="flex flex-wrap gap-2">{order.items.map((item, index) => <span key={`${item.productId}-${index}`} className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-[11px] text-neutral-600 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">{item.quantity}&times; {item.productName}{item.flavor ? ` (${item.flavor})` : ''}</span>)}</div>
+          </section>
+          <section aria-labelledby="payment-channel-label" className="space-y-3">
+            <div className="flex items-start gap-2 text-xs leading-4"><h3 id="payment-channel-label" className="font-bold text-neutral-400">PAYEE CHANNEL DETAILS:</h3><p className="text-neutral-500 dark:text-neutral-400">Select your transfer channel to view payee details</p></div>
+            <div className="grid grid-cols-3 gap-2" role="group" aria-labelledby="payment-channel-label">
+              {channels.map(channel => <button key={channel.id} type="button" disabled={saving} aria-pressed={method === channel.id} onClick={() => setMethod(channel.id)} className={`relative min-w-0 rounded-2xl border p-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-blue-500 ${method === channel.id ? 'border-blue-500 bg-blue-50/50 text-blue-600 ring-2 ring-blue-100 dark:bg-blue-950/40 dark:text-blue-400 dark:ring-blue-900' : 'border-neutral-200 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800'}`}>
+                <channel.icon size={17} className={channel.color} />
+                {method === channel.id && <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-blue-500" />}
+                <span className="mt-4 block text-xs font-bold leading-4">{channel.name}</span>
+                <span className={`mt-0.5 block text-[11px] leading-4 ${method === channel.id ? '' : 'text-neutral-500 dark:text-neutral-400'}`}>{channel.description}</span>
+              </button>)}
             </div>
-            <button onClick={() => setToastMessage(null)} className="text-xs opacity-70 hover:opacity-100 cursor-pointer">
-              ✕
-            </button>
-          </div>
-        )}
-
-        {/* Content Body */}
-        <div className="p-6 overflow-y-auto space-y-5 flex-1">
-          {/* Section 1: Transaction Totals & Requisition Details */}
-          <div
-            className={`p-4 rounded-2xl border ${
-              isDark ? 'bg-neutral-900/60 border-neutral-800' : 'bg-neutral-50/80 border-neutral-200'
-            }`}
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">
-                  Requisition Package
-                </span>
-                <p className="text-sm font-bold text-neutral-900 dark:text-white">
-                  {order.packageName || 'Commissary Requisition Order'}
-                </p>
-                <p className="text-xs text-neutral-500 mt-0.5">
-                  {totalPacks} total gourmet marshmallow packs ({order.items.length} flavor items)
-                </p>
-              </div>
-
-              <div className="sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-neutral-200 dark:border-neutral-700">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">
-                  Total Amount Payable
-                </span>
-                <p className="text-2xl font-black text-[#F37021]">
-                  ₱{order.totalAmount.toLocaleString()}
-                </p>
-                <span className="text-[10px] text-neutral-400">Zero Gateway Fees</span>
+            <div className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50/40 p-4 dark:border-blue-900 dark:bg-blue-950/20">
+              <h4 className="text-xs font-bold text-blue-800 dark:text-blue-300">Central Commissary {selectedChannel.name} Payee</h4>
+              <div className="rounded-xl border border-neutral-200 bg-white p-3 dark:border-neutral-700 dark:bg-neutral-900"><p className="text-[10px] font-semibold uppercase text-neutral-400">Payee account details</p><p className="mt-1 text-xs font-semibold">Collection accounts are not configured.</p></div>
+              <p className="text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">Ask HQ for approved {selectedChannel.name} payment details before transferring <strong>{total}</strong>. If you already paid using details confirmed by HQ, submit your receipt below.</p>
+            </div>
+          </section>
+          <section className="space-y-4 border-t border-neutral-200 pt-3 dark:border-neutral-700" aria-labelledby="manual-proof-label">
+            <div><h3 id="manual-proof-label" className="text-xs font-bold">SUBMIT MANUAL VERIFICATION PROOF:</h3><p className="mt-1 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">Provide your manual transaction reference and upload the official transfer receipt.</p></div>
+            <div><label htmlFor="proof-reference" className="mb-1.5 block text-xs font-semibold">Transaction Reference / Trace Number <span className="text-red-500">*</span></label><input id="proof-reference" required maxLength={120} disabled={saving} value={reference} onChange={e => setReference(e.target.value)} placeholder="Enter the reference on your receipt" aria-describedby="proof-reference-help" className="w-full rounded-xl border border-neutral-300 bg-transparent px-3 py-2.5 font-mono text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-neutral-600 dark:focus:ring-blue-900"/><p id="proof-reference-help" className="mt-1.5 text-[11px] text-neutral-400">Found on your transaction confirmation receipt screen.</p></div>
+            <div><label htmlFor="proof-file" className="mb-1.5 block text-xs font-semibold">Receipt Proof of Payment (Image) <span className="text-red-500">*</span></label>
+              <div className="rounded-2xl border border-dashed border-neutral-300 bg-neutral-50/50 px-3 py-5 text-center dark:border-neutral-600 dark:bg-neutral-800/30">
+                <input ref={fileInput} id="proof-file" type="file" accept="image/jpeg,image/png,image/webp" disabled={saving || validating} onChange={upload} aria-describedby="proof-file-help" className="hidden"/>
+                <button type="button" disabled={saving || validating} onClick={() => fileInput.current?.click()} className="inline-flex items-center justify-center gap-2 rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-xs font-semibold hover:bg-neutral-100 disabled:opacity-60 dark:border-neutral-600 dark:bg-neutral-900 dark:hover:bg-neutral-800"><Upload size={16} className="text-orange-500"/>{validating ? 'Checking receipt...' : proof ? 'Replace Receipt Screenshot' : 'Upload Receipt Screenshot'}</button>
+                <p id="proof-file-help" className="mt-3 text-[11px] leading-relaxed text-neutral-500 dark:text-neutral-400">PNG, JPG or WebP, up to 650 KB.<br/>Checked for file type and image integrity.</p>
+                {fileName && <p className="mt-3 flex min-w-0 items-center justify-center gap-1 text-xs text-emerald-600"><Check size={14} className="shrink-0"/><span className="truncate">{fileName}</span></p>}
               </div>
             </div>
-
-            {order.items.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-800 flex flex-wrap gap-1.5 text-[11px] text-neutral-600 dark:text-neutral-400">
-                {order.items.map((i, idx) => (
-                  <span
-                    key={idx}
-                    className="px-2 py-0.5 rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 font-medium"
-                  >
-                    {i.quantity}x {i.productName}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Section 2: Payee Details (Central Commissary Corporate Accounts) */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="block text-xs font-bold uppercase tracking-wider text-neutral-400">
-                Payee Channel Details:
-              </label>
-              <span className="text-[11px] text-neutral-500">
-                Select your transfer channel to view payee details
-              </span>
-            </div>
-
-            {/* Channel Tabs */}
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setSelectedMethod('gcash')}
-                className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
-                  selectedMethod === 'gcash'
-                    ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 ring-2 ring-blue-500/20 font-bold shadow-xs'
-                    : 'border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400 hover:border-neutral-300 dark:hover:border-neutral-700'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <Smartphone className="w-4 h-4 text-blue-500" />
-                  {selectedMethod === 'gcash' && <span className="w-2 h-2 rounded-full bg-blue-500"></span>}
-                </div>
-                <div>
-                  <div className="text-xs font-bold">GCash</div>
-                  <div className="text-[10px] opacity-75">Corporate E-Wallet</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedMethod('maya')}
-                className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
-                  selectedMethod === 'maya'
-                    ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 ring-2 ring-emerald-500/20 font-bold shadow-xs'
-                    : 'border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400 hover:border-neutral-300 dark:hover:border-neutral-700'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <Smartphone className="w-4 h-4 text-emerald-500" />
-                  {selectedMethod === 'maya' && <span className="w-2 h-2 rounded-full bg-emerald-500"></span>}
-                </div>
-                <div>
-                  <div className="text-xs font-bold">Maya</div>
-                  <div className="text-[10px] opacity-75">Corporate Wallet</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedMethod('bank_transfer')}
-                className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
-                  selectedMethod === 'bank_transfer'
-                    ? 'border-[#F37021] bg-orange-50/50 dark:bg-orange-950/40 text-[#F37021] ring-2 ring-[#F37021]/20 font-bold shadow-xs'
-                    : 'border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400 hover:border-neutral-300 dark:hover:border-neutral-700'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <Building2 className="w-4 h-4 text-[#F37021]" />
-                  {selectedMethod === 'bank_transfer' && <span className="w-2 h-2 rounded-full bg-[#F37021]"></span>}
-                </div>
-                <div>
-                  <div className="text-xs font-bold">Bank Transfer</div>
-                  <div className="text-[10px] opacity-75">BDO / BPI / UB</div>
-                </div>
-              </button>
-            </div>
-
-            {/* Payee Details Display */}
-            {selectedMethod === 'gcash' && (
-              <div className="p-4 rounded-2xl bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/60 text-xs space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-blue-900 dark:text-blue-200">
-                    Official Central Commissary GCash Payee
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-                    Verified Merchant
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div className="p-2.5 bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700">
-                    <span className="text-[10px] text-neutral-400 uppercase font-semibold block">
-                      Payee Account Name:
-                    </span>
-                    <span className="font-bold text-neutral-900 dark:text-white text-xs">
-                      {COMMISSARY_DIGITAL_WALLETS.gcash.merchantName}
-                    </span>
-                  </div>
-
-                  <div className="p-2.5 bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] text-neutral-400 uppercase font-semibold block">
-                        Mobile / Wallet Number:
-                      </span>
-                      <span className="font-mono font-bold text-neutral-900 dark:text-white text-sm">
-                        {COMMISSARY_DIGITAL_WALLETS.gcash.walletNumber}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(COMMISSARY_DIGITAL_WALLETS.gcash.walletNumber, 'gcash_num')}
-                      className="p-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:text-blue-600 cursor-pointer"
-                      title="Copy Mobile Number"
-                    >
-                      {copiedField === 'gcash_num' ? (
-                        <Check className="w-4 h-4 text-emerald-500" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
-                  Transfer exact total of <strong>₱{order.totalAmount.toLocaleString()}</strong> to the mobile wallet above.
-                  Save a screenshot of the completed transfer slip with the 13-digit Reference Number.
-                </p>
-              </div>
-            )}
-
-            {selectedMethod === 'maya' && (
-              <div className="p-4 rounded-2xl bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/60 text-xs space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-emerald-900 dark:text-emerald-200">
-                    Official Central Commissary Maya Payee
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200">
-                    Verified Business
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div className="p-2.5 bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700">
-                    <span className="text-[10px] text-neutral-400 uppercase font-semibold block">
-                      Payee Account Name:
-                    </span>
-                    <span className="font-bold text-neutral-900 dark:text-white text-xs">
-                      {COMMISSARY_DIGITAL_WALLETS.maya.merchantName}
-                    </span>
-                  </div>
-
-                  <div className="p-2.5 bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] text-neutral-400 uppercase font-semibold block">
-                        Mobile / Account Number:
-                      </span>
-                      <span className="font-mono font-bold text-neutral-900 dark:text-white text-sm">
-                        {COMMISSARY_DIGITAL_WALLETS.maya.walletNumber}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(COMMISSARY_DIGITAL_WALLETS.maya.walletNumber, 'maya_num')}
-                      className="p-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:text-emerald-600 cursor-pointer"
-                      title="Copy Mobile Number"
-                    >
-                      {copiedField === 'maya_num' ? (
-                        <Check className="w-4 h-4 text-emerald-500" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
-                  Send exact total of <strong>₱{order.totalAmount.toLocaleString()}</strong> via Maya Send Money to the number above.
-                  Save a screenshot of the Maya payment receipt showing the Reference ID.
-                </p>
-              </div>
-            )}
-
-            {selectedMethod === 'bank_transfer' && (
-              <div className="space-y-3">
-                {/* Bank Sub-tabs */}
-                <div className="flex items-center space-x-2 border-b border-neutral-200 dark:border-neutral-800 pb-2">
-                  {COMMISSARY_BANK_ACCOUNTS.map((b, idx) => (
-                    <button
-                      key={b.shortName}
-                      type="button"
-                      onClick={() => setSelectedBankIndex(idx)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                        selectedBankIndex === idx
-                          ? 'bg-[#F37021] text-white shadow-xs'
-                          : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'
-                      }`}
-                    >
-                      {b.shortName}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700 text-xs space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-neutral-900 dark:text-white text-sm">
-                      {activeBank.bankName}
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                      InstaPay & PESONet Enabled
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                    <div className="p-2.5 bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700">
-                      <span className="text-[10px] text-neutral-400 uppercase font-semibold block">
-                        Account Name:
-                      </span>
-                      <span className="font-bold text-neutral-900 dark:text-white text-xs">
-                        {activeBank.accountName}
-                      </span>
-                    </div>
-
-                    <div className="p-2.5 bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] text-neutral-400 uppercase font-semibold block">
-                          Account Number:
-                        </span>
-                        <span className="font-mono font-bold text-neutral-900 dark:text-white text-sm">
-                          {activeBank.accountNumber}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(activeBank.accountNumber, 'acct')}
-                        className="p-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:text-[#F37021] cursor-pointer"
-                        title="Copy Account Number"
-                      >
-                        {copiedField === 'acct' ? (
-                          <Check className="w-4 h-4 text-emerald-500" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
-                    Branch: <strong>{activeBank.branch}</strong> • Include Order #{order.id} in transfer remarks/notes.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Section 3: Submit Manual Proof of Payment Form */}
-          <form onSubmit={handleSubmitProof} className="space-y-4 pt-2 border-t border-neutral-200 dark:border-neutral-800">
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
-                Submit Manual Verification Proof:
-              </h4>
-              <p className="text-[11px] text-neutral-500">
-                Provide your manual transaction reference and upload the official transfer receipt.
-              </p>
-            </div>
-
-            {/* Field 1: Reference Number Input */}
-            <div>
-              <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
-                Transaction Reference / Trace Number <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={manualReference}
-                onChange={(e) => setManualReference(e.target.value)}
-                placeholder={
-                  selectedMethod === 'gcash'
-                    ? 'e.g. 20260908-189283 (13-digit GCash Ref)'
-                    : selectedMethod === 'maya'
-                    ? 'e.g. MY-20260908-9842 (Maya Ref ID)'
-                    : 'e.g. 20260908-BDO-84920 (InstaPay / Bank Trace)'
-                }
-                className="w-full px-3.5 py-2.5 text-xs bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl focus:ring-2 focus:ring-[#F37021] focus:outline-hidden font-mono text-neutral-900 dark:text-white"
-              />
-              <span className="text-[10px] text-neutral-400 mt-1 block">
-                Found on your transaction confirmation receipt screen.
-              </span>
-            </div>
-
-            {/* Field 2: Receipt Image Upload & Validation Dropzone */}
-            <div>
-              <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
-                Receipt Proof of Payment (Image / PDF) <span className="text-red-500">*</span>
-              </label>
-
-              {!validatedFileInfo && !proofUrlInput ? (
-                <div className="p-4 rounded-2xl border-2 border-dashed border-neutral-300 dark:border-neutral-700 bg-neutral-50/60 dark:bg-neutral-800/40 text-center space-y-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp,application/pdf"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    id="branch-proof-upload-input"
-                  />
-                  <label
-                    htmlFor="branch-proof-upload-input"
-                    className="cursor-pointer inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 font-bold hover:bg-neutral-100 dark:hover:bg-neutral-700 shadow-2xs transition-all text-xs"
-                  >
-                    <Upload className="w-4 h-4 text-[#F37021]" />
-                    <span>{isValidatingFile ? 'Scanning File Integrity...' : 'Upload Receipt Screenshot'}</span>
-                  </label>
-                  <p className="text-[11px] text-neutral-500">
-                    PNG, JPG, WebP, or PDF up to 15MB • Scanned for binary safety & integrity
-                  </p>
-
-                  <div className="pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setShowUrlFallback(!showUrlFallback)}
-                      className="text-[11px] text-neutral-500 hover:text-[#F37021] underline cursor-pointer"
-                    >
-                      {showUrlFallback ? 'Hide URL input' : 'Or paste receipt image URL'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-3.5 rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/60 flex items-center justify-between gap-3">
-                  <div className="flex items-center space-x-3 overflow-hidden">
-                    {validatedFileInfo?.previewUrl ? (
-                      <img
-                        src={validatedFileInfo.previewUrl}
-                        alt="Receipt Preview"
-                        className="w-12 h-12 rounded-xl object-cover border border-neutral-200 dark:border-neutral-700 shrink-0"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-xl bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center shrink-0 text-[#F37021]">
-                        <FileText className="w-6 h-6" />
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <div className="flex items-center space-x-1.5">
-                        <span className="text-xs font-bold text-neutral-900 dark:text-white truncate">
-                          {validatedFileInfo?.fileName || 'Receipt Image Attached'}
-                        </span>
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center space-x-1">
-                          <Check className="w-2.5 h-2.5" />
-                          <span>Ready</span>
-                        </span>
-                      </div>
-                      {validatedFileInfo && (
-                        <p className="text-[10px] text-neutral-400">
-                          {(validatedFileInfo.fileSize / 1024).toFixed(1)} KB • {validatedFileInfo.mimeType}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleRemoveFile}
-                    className="p-2 rounded-xl text-neutral-400 hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer shrink-0"
-                    title="Remove file"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-
-              {/* Optional URL Input Fallback */}
-              {showUrlFallback && (
-                <div className="mt-2">
-                  <input
-                    type="text"
-                    value={proofUrlInput}
-                    onChange={(e) => setProofUrlInput(e.target.value)}
-                    placeholder="https://... (direct URL to receipt screenshot)"
-                    className="w-full px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl font-mono text-neutral-900 dark:text-white"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Admin Audit Compliance Note */}
-            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs flex items-start space-x-2.5">
-              <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <div className="text-[11px] text-amber-900 dark:text-amber-200">
-                <span className="font-bold">Manual Treasury Review Protocol:</span>
-                <p className="text-neutral-600 dark:text-neutral-300 mt-0.5">
-                  Your reference number and receipt image are forwarded to the Central Bicol Commissary Treasury Queue.
-                  HQ Admin will manually verify funds before unlocking MTO confectionery batching and J&T Express dispatch.
-                </p>
-              </div>
-            </div>
-
-            {/* Form Action Buttons */}
-            <div className="flex items-center justify-end space-x-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-xs font-semibold rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isValidatingFile || !proofUrlInput.trim() || !manualReference.trim()}
-                className="px-5 py-2.5 text-xs font-bold rounded-xl bg-[#F37021] text-white hover:bg-[#d85e15] disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 shadow-xs transition-all cursor-pointer"
-              >
-                <Upload className="w-4 h-4" />
-                <span>Submit Proof of Payment for Admin Review</span>
-              </button>
-            </div>
-          </form>
-        </div>
+            {validating && <p role="status" className="text-xs text-neutral-500">Checking receipt image...</p>}
+            {proof && <img src={proof} alt="Payment receipt preview" className="max-h-64 w-full rounded-xl bg-neutral-100 object-contain dark:bg-neutral-800"/>}
+          </section>
+          <aside className="flex gap-3 rounded-2xl border border-orange-200 bg-orange-50 p-4 dark:border-orange-900 dark:bg-orange-950/30"><ShieldCheck size={18} className="mt-0.5 shrink-0 text-orange-500"/><div><h3 className="text-xs font-bold text-orange-800 dark:text-orange-300">Manual Treasury Review Protocol:</h3><p className="mt-1 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">Your reference number and receipt image are forwarded to the commissary payment verification queue. HQ Admin will manually verify funds before production and dispatch can proceed.</p></div></aside>
+          {error && <p role="alert" className="flex gap-2 rounded-xl bg-red-50 p-3 text-xs text-red-800 dark:bg-red-950 dark:text-red-200"><AlertCircle className="shrink-0" size={18}/>{error}</p>}
+          <footer className="flex items-center gap-3 pb-1">
+            <button type="button" onClick={onClose} disabled={saving || validating} className="rounded-xl border border-neutral-300 px-4 py-2.5 text-xs font-medium hover:bg-neutral-100 disabled:opacity-60 dark:border-neutral-600 dark:hover:bg-neutral-800">Cancel</button>
+            <button type="submit" disabled={saving || validating || !proof || !reference.trim()} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-orange-500 px-3 py-3 text-xs font-bold leading-4 text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300 dark:disabled:bg-orange-900"><Upload size={15} className="shrink-0"/>{saving ? 'Submitting...' : <span>Submit Proof of<br/>Payment for Admin Review</span>}</button>
+          </footer>
+        </form>
       </div>
     </div>
   );

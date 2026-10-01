@@ -33,7 +33,7 @@ const StaffShiftSummary = lazyNamed(() => import('./components/branch/StaffShift
 const SettingsPage = lazyNamed(() => import('./components/settings/SettingsPage'), 'SettingsPage');
 
 const MainShell: React.FC = () => {
-  const { currentUser, themeMode } = useData();
+  const { currentUser, themeMode, syncState } = useData();
   const [activeTab, setActiveTab] = useState<string>('physical_counts');
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
 
@@ -93,6 +93,9 @@ const MainShell: React.FC = () => {
   return (
     <>
       <MfaEnrollmentGate />
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-xl focus:bg-white focus:px-4 focus:py-3 focus:text-neutral-900 focus:shadow-lg">
+        Skip to main content
+      </a>
       <div
         className={`mallow-shell min-h-screen flex transition-colors duration-200 ${
           themeMode === 'dark' ? 'bg-[#101010] text-[#f2f2f2]' : 'text-neutral-900'
@@ -111,13 +114,20 @@ const MainShell: React.FC = () => {
           {/* Sticky Top Header with Breadcrumbs & Responsive Controls */}
           <TopHeader
             activeTab={activeTab}
+            isMobileOpen={isMobileOpen}
             onToggleMobileMenu={() => setIsMobileOpen(!isMobileOpen)}
             onNavigateTab={setActiveTab}
           />
 
         {/* View Content Enforcing 3-Tier RBAC Route Protection */}
-        <main className="mallow-main flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-7 animate-in fade-in duration-300">
-          <Suspense fallback={<div className="mallow-panel rounded-2xl p-8 text-sm text-neutral-500">Loading workspace…</div>}>
+        <main id="main-content" tabIndex={-1} className="mallow-main flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-7 animate-in fade-in duration-300">
+          {syncState.error && (
+            <div role="alert" className="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-800 dark:bg-rose-950 dark:text-rose-200">
+              <p className="font-semibold">Cloud sync needs attention</p>
+              <p className="mt-1 break-words">{syncState.error}</p>
+            </div>
+          )}
+          <Suspense fallback={<div role="status" className="mallow-panel rounded-2xl p-8 text-sm text-neutral-500">Loading workspace…</div>}>
           {/* TIER 1: BRANCH_STAFF (Frontline Ground Operations) */}
           {isStaff && (
             <>
@@ -236,7 +246,7 @@ const MainShell: React.FC = () => {
               <strong>VertexIS</strong> • Marsh Bites Gourmet Marshmallow Enterprise System
             </p>
             <p className="text-[11px]">
-              Commissary: Legazpi City, Albay • 19 Nationwide Franchise Branches • 3-Tier RBAC
+              Commissary: Legazpi City, Albay • Nationwide Branch Network
             </p>
           </div>
         </footer>

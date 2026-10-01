@@ -16,14 +16,20 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return signedIn() && request.auth.token.role == 'admin';
+      return signedIn() && request.auth.token.role == 'admin'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isActive', true) == true;
     }
 
     function isBranch() {
       return signedIn()
         && request.auth.token.role == 'branch'
         && request.auth.token.branchId is string
-        && request.auth.token.branchId.size() > 0;
+        && request.auth.token.branchId.size() > 0
+        && get(/databases/$(database)/documents/branch_accounts/$(request.auth.uid)).data.isActive == true
+        && get(/databases/$(database)/documents/branch_accounts/$(request.auth.uid)).data.branchId == request.auth.token.branchId
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isActive', true) == true
+        && !(get(/databases/$(database)/documents/branches/$(request.auth.token.branchId)).data.status in ['suspended', 'archived', 'closed', 'deleted', 'Suspended', 'Archived', 'Closed', 'Deleted']);
     }
 
     function claimBranchId() {
@@ -96,6 +102,9 @@ service cloud.firestore {
           'createdAt', 'lastLoginAt', 'updatedAt'
         ])
         && branchData(data)
+        && data.role in ['Branch Manager', 'Staff', 'Cashier', 'Inventory Specialist']
+        && data.isActive is bool
+        && data.permissions is list && data.permissions.size() <= 30
         && data.email is string
         && data.email.size() <= 254
         && data.fullName is string
@@ -130,7 +139,7 @@ service cloud.firestore {
     }
 
     function canReadBranch(data) {
-      return isAdmin() || ownBranch(data);
+      return isAdmin() || (isBranch() && data.branchId == claimBranchId());
     }
 
     function canUpdateBranch() {
@@ -148,19 +157,36 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    function productData(data) {
+      return safeId(data) && data.keys().hasOnly(['id', 'name', 'flavor', 'category', 'price', 'wholesalePrice', 'adminStock', 'updatedAt', 'updatedBy'])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 160
+        && data.flavor is string && data.flavor.size() <= 160
+        && data.price is number && data.price >= 0 && data.price <= 100000000
+        && (!('wholesalePrice' in data) || (data.wholesalePrice is number && data.wholesalePrice >= 0 && data.wholesalePrice <= 100000000))
+        && data.adminStock is int && data.adminStock >= 0 && data.adminStock <= 1000000;
+    }
     match /products/{productId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
+      allow read: if isAdmin() || isBranch();
+      allow create, update: if isAdmin() && productData(request.resource.data);
+      allow delete: if isAdmin();
     }
 
+    function canReadAnnouncement(data) {
+      return isAdmin() || (isBranch() && (data.get('scope', '') in ['nationwide', 'global'] || data.get('targetBranchId', '') == claimBranchId()));
+    }
     match /announcements/{announcementId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
+      allow read: if canReadAnnouncement(resource.data);
+      allow create, update: if isAdmin() && safeId(request.resource.data)
+        && request.resource.data.title is string && request.resource.data.message is string
+        && request.resource.data.get('scope', '') in ['nationwide', 'global', 'branch', 'commissary'];
+      allow delete: if isAdmin();
     }
-
     match /events/{eventId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
+      allow read: if isAdmin() || (isBranch() && resource.data.branchId in ['ALL', claimBranchId()]);
+      allow create, update: if isAdmin() && safeId(request.resource.data)
+        && request.resource.data.title is string && request.resource.data.date is string
+        && request.resource.data.branchId is string;
+      allow delete: if isAdmin();
     }
 
     match /branch_applications/{applicationId} {
@@ -171,8 +197,7 @@ service cloud.firestore {
 
     match /branch_documents/{documentId} {
       allow read: if canReadBranch(resource.data);
-      allow create: if isAdmin() || ownBranch(request.resource.data);
-      allow update: if canUpdateBranch();
+      allow create, update: if isAdmin() && branchData(request.resource.data);
       allow delete: if isAdmin();
     }
 
@@ -195,16 +220,14 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    match /sales/{saleId} {
+    match /sales/{recordId} {
       allow read: if canReadBranch(resource.data);
-      allow create: if isAdmin() || ownBranch(request.resource.data);
-      allow update, delete: if false;
+      allow write: if false; // Only validated, atomic callable transactions.
     }
 
-    match /inventoryMovements/{movementId} {
+    match /inventoryMovements/{recordId} {
       allow read: if canReadBranch(resource.data);
-      allow create: if isAdmin() || ownBranch(request.resource.data);
-      allow update, delete: if false;
+      allow write: if false; // Only validated, atomic callable transactions.
     }
 
     match /posAuditLogs/{auditId} {
@@ -213,62 +236,78 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    match /shiftClosings/{closingId} {
+    match /shiftClosings/{recordId} {
       allow read: if canReadBranch(resource.data);
-      allow create: if isAdmin() || ownBranch(request.resource.data);
-      allow update, delete: if false;
+      allow write: if false;
     }
 
-    match /orders/{orderId} {
+    match /orders/{recordId} {
       allow read: if canReadBranch(resource.data);
-      allow create: if isAdmin() || ownBranch(request.resource.data);
-      allow update: if canUpdateBranch();
-      allow delete: if isAdmin();
+      allow write: if false; // Only validated, atomic callable transactions.
     }
 
-    match /deliveries/{deliveryId} {
+    match /deliveries/{recordId} {
       allow read: if canReadBranch(resource.data);
-      allow create: if isAdmin() || ownBranch(request.resource.data);
-      allow update: if canUpdateBranch();
-      allow delete: if isAdmin();
+      allow write: if false; // Only validated, atomic callable transactions.
     }
 
-    match /receivings/{receivingId} {
+    match /receivings/{recordId} {
       allow read: if canReadBranch(resource.data);
-      allow create: if isAdmin() || ownBranch(request.resource.data);
-      allow update: if canUpdateBranch();
-      allow delete: if isAdmin();
+      allow write: if false; // Only validated, atomic callable transactions.
     }
 
+    // InboundReceipt: immutable submitted item snapshot, branchId, status,
+    // revision and manager review metadata. Trusted callable Functions validate
+    // all fields and atomically apply stock; browser clients may only read.
+    match /inbound_receipts/{receiptId} {
+      allow read: if isAdmin() || (isBranch() && resource.data.branchId == claimBranchId());
+      allow create, update, delete: if false;
+    }
+
+    function inventoryData(data) {
+      return branchData(data) && data.keys().hasOnly(['id', 'branchId', 'productId', 'productName', 'stock', 'currentStock', 'minThreshold', 'updatedAt'])
+        && data.productId is string && data.productName is string && data.stock is int && data.stock >= 0
+        && (!('currentStock' in data) || data.currentStock == data.stock);
+    }
     match /inventory/{inventoryId} {
       allow read: if canReadBranch(resource.data);
-      allow create: if isAdmin() || ownBranch(request.resource.data);
-      allow update: if canUpdateBranch();
-      allow delete: if isAdmin();
+      allow create: if isAdmin() && inventoryData(request.resource.data) && request.resource.data.stock == 0;
+      allow update: if isAdmin() && inventoryData(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['productName', 'minThreshold', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    match /daily_shift_logs/{logId} {
+      allow read: if canReadBranch(resource.data);
+      allow write: if false;
+    }
+
+    match /payment_proofs/{orderId} { allow read, write: if false; }
+    match /transaction_requests/{requestId} { allow read, write: if false; }
+    match /request_limits/{uid} { allow read, write: if false; }
+    match /transaction_audit/{auditId} {
+      allow read: if canReadBranch(resource.data);
+      allow write: if false;
     }
 
     match /spoilage_records/{recordId} {
       allow read: if canReadBranch(resource.data);
-      allow create: if isAdmin() || ownBranch(request.resource.data);
-      allow update, delete: if false;
+      allow write: if false;
     }
 
-    match /physical_audits/{auditId} {
+    match /physical_audits/{recordId} {
       allow read: if canReadBranch(resource.data);
-      allow create: if isAdmin() || ownBranch(request.resource.data);
-      allow update: if canUpdateBranch();
-      allow delete: if isAdmin();
+      allow write: if false;
     }
 
-    match /birReceipts/{receiptId} {
+    match /birReceipts/{recordId} {
       allow read: if canReadBranch(resource.data);
-      allow create: if isAdmin() || ownBranch(request.resource.data);
-      allow update: if canUpdateBranch();
-      allow delete: if false;
+      allow write: if false;
     }
 
     match /production_batches/{batchId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     match /system_sync/{documentId} {

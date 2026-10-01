@@ -35,6 +35,8 @@ export const DEFAULT_FORECAST_DAYS = 7;
 export const DEFAULT_SAFETY_BUFFER = 5;
 
 export interface ProductDemandAnalytics {
+  hasSalesHistory: boolean;
+  historyDays: number;
   productId: string;
   productName: string;
   flavor: string;
@@ -59,7 +61,7 @@ export interface ProductDemandAnalytics {
   // Final B2B Reorder Recommendation
   suggestedOrderQuantity: number;
   urgency: 'Urgent' | 'Review' | 'Optimal';
-  stockoutRiskPercentage: number;
+  stockoutRiskPercentage?: number;
   estimatedDepletionDays: number;
 }
 
@@ -72,6 +74,7 @@ export function calculateSingleExponentialSmoothing(
   dailySales: number[],
   alpha: number = EXPONENTIAL_SMOOTHING_ALPHA
 ): number {
+  if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1 || dailySales.some(value => !Number.isFinite(value) || value < 0)) throw new Error('Invalid forecast input.');
   if (!dailySales || dailySales.length === 0) return 0;
   if (dailySales.length === 1) return dailySales[0];
 
@@ -106,7 +109,7 @@ export function buildDailySalesSeries(
       s.branchId === branchId &&
       s.productId === productId &&
       s.status !== 'voided' &&
-      s.status !== 'refunded'
+      s.status !== 'refunded' && Number.isFinite(s.quantity) && s.quantity > 0
   );
 
   productSales.forEach((sale) => {
@@ -161,7 +164,7 @@ export function computeProductDemandAnalytics(
   // Target Stock = Expected Forecast + Safety Buffer
   const targetStock = Math.ceil(expectedWeeklyDemand) + safetyBuffer;
   const effectiveAvailable = currentStock + inTransitStock;
-  const suggestedOrderQuantity = Math.max(0, targetStock - effectiveAvailable);
+  const suggestedOrderQuantity = totalSalesUnits > 0 ? Math.max(0, targetStock - effectiveAvailable) : 0;
 
   // 5. Stockout risk & urgency assessment
   let urgency: 'Urgent' | 'Review' | 'Optimal' = 'Optimal';
@@ -171,39 +174,35 @@ export function computeProductDemandAnalytics(
     estimatedDepletionDays = Number((currentStock / smoothedDailyDemand).toFixed(1));
   }
 
-  let stockoutRiskPercentage = 0;
   if (currentStock <= 3 || (smoothedDailyDemand > 0 && estimatedDepletionDays <= 2)) {
     urgency = 'Urgent';
-    stockoutRiskPercentage = 90;
   } else if (currentStock <= 8 || (smoothedDailyDemand > 0 && estimatedDepletionDays <= 5)) {
     urgency = 'Review';
-    stockoutRiskPercentage = 55;
   } else if (suggestedOrderQuantity > 0) {
     urgency = 'Review';
-    stockoutRiskPercentage = 30;
   } else {
     urgency = 'Optimal';
-    stockoutRiskPercentage = 10;
   }
 
   return {
+    hasSalesHistory: totalSalesUnits > 0,
+    historyDays,
     productId: product.id,
     productName: product.name,
     flavor: product.flavor,
     currentStock,
     inTransitStock,
     totalHistoricalSalesUnits: totalSalesUnits,
-    salesTransactionsCount: sales.filter((s) => s.branchId === branchId && s.productId === product.id).length,
+    salesTransactionsCount: sales.filter(s => s.branchId === branchId && s.productId === product.id && s.status !== 'voided' && s.status !== 'refunded' && Number.isFinite(s.quantity) && s.quantity > 0 && new Date(s.date).getTime() <= Date.now() && new Date(s.date).getTime() >= new Date().setHours(0, 0, 0, 0) - (historyDays - 1) * 86400000).length,
     rawAverageDailySales: rawAvgDaily,
     isolatedWastageUnits,
     isolatedWastageCost,
-    spoilageIsolationVerified: true, // Formal certificate of research compliance
+    spoilageIsolationVerified: true, // Wastage is excluded from the input sales series.
     smoothedDailyDemand,
     expectedWeeklyDemand,
     safetyStockBuffer: safetyBuffer,
     suggestedOrderQuantity,
     urgency,
-    stockoutRiskPercentage,
     estimatedDepletionDays,
   };
 }

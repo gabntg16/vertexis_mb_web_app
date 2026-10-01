@@ -1,3 +1,4 @@
+import { PaymentProofImage } from '../common/PaymentProofImage';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import {
@@ -99,9 +100,9 @@ export const AdminPaymentVerificationQueue: React.FC = () => {
   }, []);
 
   // Handle Approve
-  const handleApprove = (orderId: string, branchName: string, remarks?: string) => {
+  const handleApprove = async (orderId: string, branchName: string, remarks?: string) => {
     try {
-      approvePaymentProof(orderId, currentUser?.name || 'HQ Finance Officer', remarks || 'Verified valid transfer receipt');
+      await approvePaymentProof(orderId, currentUser?.name || 'HQ Finance Officer', remarks || 'Verified valid transfer receipt');
       showFeedback(`Proof of payment for Order #${orderId} (${branchName}) approved! Kitchen batching unlocked.`, 'success');
       if (selectedOrderForImage?.id === orderId) {
         setSelectedOrderForImage(null);
@@ -113,12 +114,12 @@ export const AdminPaymentVerificationQueue: React.FC = () => {
   };
 
   // Handle Reject
-  const handleConfirmReject = (e: React.FormEvent) => {
+  const handleConfirmReject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rejectingOrder || !rejectionReason.trim()) return;
 
     try {
-      rejectPaymentProof(rejectingOrder.id, rejectionReason.trim());
+      await rejectPaymentProof(rejectingOrder.id, rejectionReason.trim());
       showFeedback(`Order #${rejectingOrder.id} rejected with reason: "${rejectionReason.trim()}".`, 'info');
       setRejectingOrder(null);
       setRejectionReason('');
@@ -356,7 +357,7 @@ export const AdminPaymentVerificationQueue: React.FC = () => {
                       className="p-2 rounded-2xl bg-neutral-100 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700 flex items-center space-x-2.5 cursor-pointer hover:border-[#80C7F2] transition-all group"
                     >
                       {ord.proofImagePath ? (
-                        <img
+                        <PaymentProofImage
                           src={ord.proofImagePath}
                           alt="Proof of Payment"
                           className="w-12 h-12 rounded-xl object-cover border border-neutral-300 dark:border-neutral-700 group-hover:scale-105 transition-transform"
@@ -459,7 +460,7 @@ export const AdminPaymentVerificationQueue: React.FC = () => {
 
             <div className="my-2 flex-1 overflow-y-auto flex flex-col items-center justify-center p-3 rounded-2xl bg-black/5 dark:bg-black/40 border border-neutral-200 dark:border-neutral-800 m-4">
               {selectedOrderForImage.proofImagePath ? (
-                <img
+                <PaymentProofImage
                   src={selectedOrderForImage.proofImagePath}
                   alt="Proof of Payment Large"
                   className="max-h-[50vh] w-auto object-contain rounded-xl shadow-lg border border-neutral-300 dark:border-neutral-700"
@@ -599,7 +600,7 @@ export const AdminPaymentVerificationQueue: React.FC = () => {
                 {/* Thumbnail of attached proof if available */}
                 {confirmingApprovalOrder.proofImagePath && (
                   <div className="flex items-center space-x-3 p-2.5 rounded-2xl bg-neutral-100/70 dark:bg-neutral-800/70 border border-neutral-200 dark:border-neutral-700">
-                    <img
+                    <PaymentProofImage
                       src={confirmingApprovalOrder.proofImagePath}
                       alt="Proof Slip Thumbnail"
                       className="w-12 h-12 rounded-xl object-cover border border-neutral-300 dark:border-neutral-600 shrink-0"

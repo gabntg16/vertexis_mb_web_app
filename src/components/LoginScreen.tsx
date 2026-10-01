@@ -207,17 +207,18 @@ export const LoginScreen: React.FC = () => {
           {mfaResolver ? (
             <form onSubmit={handleMfaSubmit} className="mt-6 space-y-4 text-left">
               {error && (
-                <div className="flex items-center space-x-2 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs">
+                <div role="alert" className="flex items-center space-x-2 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1">
+                <label htmlFor="verification-code" className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1">
                   Verification Code
                 </label>
                 <input
                   type="text"
+                  id="verification-code"
                   inputMode="numeric"
                   autoComplete="one-time-code"
                   required
@@ -236,7 +237,7 @@ export const LoginScreen: React.FC = () => {
                 disabled={isSubmitting}
                 className="mallow-button w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#F37021] to-amber-500 text-white font-bold text-sm shadow-md flex items-center justify-center space-x-2"
               >
-                <span>Verify MFA Code</span>
+                <span>{isSubmitting ? 'Please wait…' : 'Verify MFA Code'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
               <button
@@ -251,14 +252,14 @@ export const LoginScreen: React.FC = () => {
           ) : (
           <form onSubmit={handleSubmit} className="mt-6 space-y-4 text-left">
             {error && (
-              <div className="flex items-center space-x-2 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs">
+              <div role="alert" className="flex items-center space-x-2 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 <span>{error}</span>
               </div>
             )}
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1">
+              <label htmlFor="login-email" className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1">
                 Email Address
               </label>
               <div className="relative">
@@ -267,6 +268,8 @@ export const LoginScreen: React.FC = () => {
                 </div>
                 <input
                   type="email"
+                  id="login-email"
+                  autoComplete="username"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -281,7 +284,7 @@ export const LoginScreen: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1">
+              <label htmlFor="login-password" className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-1">
                 Password
               </label>
               <div className="relative">
@@ -290,6 +293,8 @@ export const LoginScreen: React.FC = () => {
                 </div>
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  id="login-password"
+                  autoComplete="current-password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -321,7 +326,7 @@ export const LoginScreen: React.FC = () => {
               disabled={isSubmitting}
               className="mallow-button w-full mt-2 py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#F37021] to-amber-500 text-white font-bold text-sm shadow-md hover:opacity-95 active:scale-[0.99] transition-all flex items-center justify-center space-x-2"
             >
-              <span>Sign In to System</span>
+              <span>{isSubmitting ? 'Signing in…' : 'Sign In to System'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>

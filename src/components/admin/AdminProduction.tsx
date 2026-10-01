@@ -1,3 +1,4 @@
+import { paymentReady } from '../../../functions/src/transactionModel';
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { Product } from '../../types';
@@ -19,7 +20,10 @@ import {
   Play,
   X,
   ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
+import { CommissarySummary } from './CommissarySummary';
+import { CommissaryRequisitionInspect } from './CommissaryRequisitionInspect';
 import {
   ProductionSafeguardModal,
   ProductionSafeguardDetails,
@@ -128,6 +132,7 @@ export const AdminProduction: React.FC = () => {
     products,
     branches,
     orders,
+    productionBatches,
     madeToOrderDemand,
     updateOrderProductionStage,
     produceForOrder,
@@ -139,6 +144,8 @@ export const AdminProduction: React.FC = () => {
   } = useData();
 
   const [activeSubTab, setActiveSubTab] = useState<'pipeline' | 'demand' | 'catalog'>('pipeline');
+  const [inspectedOrderId, setInspectedOrderId] = useState<string | null>(null);
+  const inspectedOrder = orders.find(order => order.id === inspectedOrderId);
 
   // Safeguard modal state
   const [safeguardDetails, setSafeguardDetails] = useState<ProductionSafeguardDetails | null>(null);
@@ -210,7 +217,8 @@ export const AdminProduction: React.FC = () => {
     const totalUnits = ord.items.reduce((sum, i) => sum + i.quantity, 0);
     const isApproved = ord.status === 'approved';
     const hasProof = Boolean(ord.proofImagePath && ord.proofImagePath.trim() !== '');
-    const isBatchingEligible = isApproved && hasProof;
+    const isBatchingEligible = paymentReady(ord);
+    if (!isBatchingEligible) return;
 
     if (targetStage === 'queued') {
       setSafeguardDetails({
@@ -241,7 +249,7 @@ export const AdminProduction: React.FC = () => {
         orderId: ord.id,
         fromStage: 'Queued',
         toStage: 'In-Kitchen',
-        onConfirm: () => updateOrderProductionStage(ord.id, 'in_kettle', undefined, !isBatchingEligible),
+        onConfirm: () => updateOrderProductionStage(ord.id, 'in_kettle', undefined, false),
       });
       return;
     }
@@ -272,7 +280,7 @@ export const AdminProduction: React.FC = () => {
         orderId: ord.id,
         fromStage: 'In-Kitchen',
         toStage: 'Packed & QC',
-        onConfirm: () => updateOrderProductionStage(ord.id, 'packaging', undefined, !isBatchingEligible),
+        onConfirm: () => updateOrderProductionStage(ord.id, 'packaging', undefined, false),
       });
       return;
     }
@@ -303,7 +311,7 @@ export const AdminProduction: React.FC = () => {
         orderId: ord.id,
         fromStage: 'Packed & QC',
         toStage: 'Ready',
-        onConfirm: () => updateOrderProductionStage(ord.id, 'ready_for_dispatch', undefined, !isBatchingEligible),
+        onConfirm: () => updateOrderProductionStage(ord.id, 'ready_for_dispatch', undefined, false),
       });
       return;
     }
@@ -311,6 +319,13 @@ export const AdminProduction: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {inspectedOrder && <CommissaryRequisitionInspect
+        key={inspectedOrder.id}
+        order={inspectedOrder}
+        batches={productionBatches.filter(batch => batch.targetOrderId === inspectedOrder.id)}
+        stageLabel={getCompactLabel(inspectedOrder.productionStage)}
+        onClose={() => setInspectedOrderId(null)}
+      />}
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="min-w-0">
@@ -325,6 +340,7 @@ export const AdminProduction: React.FC = () => {
 
         {/* Responsive Action Button */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto shrink-0">
+          <CommissarySummary />
           <button
             type="button"
             onClick={handleOpenNewProduct}
@@ -470,7 +486,7 @@ export const AdminProduction: React.FC = () => {
                 const totalUnits = ord.items.reduce((sum, i) => sum + i.quantity, 0);
                 const isApproved = ord.status === 'approved';
                 const hasProof = Boolean(ord.proofImagePath && ord.proofImagePath.trim() !== '');
-                const isBatchingEligible = isApproved && hasProof;
+                const isBatchingEligible = paymentReady(ord);
 
                 return (
                   <div
@@ -516,7 +532,7 @@ export const AdminProduction: React.FC = () => {
                         {!isBatchingEligible && (
                           <div className="flex items-center space-x-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg">
                             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                            <span>Production Locked: {!isApproved ? 'Requires order approval' : 'Payment proof required'} before commissary processing.</span>
+                            <span>Production Locked: {!isApproved ? 'Requires order approval' : 'Verified payment required'} before commissary processing.</span>
                           </div>
                         )}
 
@@ -531,6 +547,9 @@ export const AdminProduction: React.FC = () => {
 
                       {/* Stage Progression Controls */}
                       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                        <button type="button" onClick={() => setInspectedOrderId(ord.id)} aria-haspopup="dialog" aria-label={`Inspect requisition ${ord.id} for ${ord.branchName}`} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-neutral-100 px-4 py-2.5 text-xs font-bold text-neutral-800 transition-colors hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700">
+                          Inspect <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
                         {/* Dropdown Short & Punchy (Compact UI): Queued, In-Kitchen, Packed & QC, Ready */}
                         <div className="flex items-center space-x-2 bg-neutral-100 dark:bg-neutral-800/80 p-1.5 px-3 rounded-2xl border border-neutral-200 dark:border-neutral-700">
                           <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 dark:text-neutral-500 whitespace-nowrap">
@@ -538,6 +557,7 @@ export const AdminProduction: React.FC = () => {
                           </span>
                           <div className="relative inline-flex items-center min-w-[130px]">
                             <select
+                              disabled={!isBatchingEligible}
                               value={getCompactStage(ord.productionStage)}
                               onChange={(e) => handleStageDropdownChange(ord, e.target.value as CompactProductionStage)}
                               className={`w-full appearance-none pl-3 pr-8 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-[#F37021]/50 ${
@@ -564,28 +584,10 @@ export const AdminProduction: React.FC = () => {
 
                         {stage === 'queued' && (
                           <button
+                            disabled={!isBatchingEligible}
                             type="button"
                             onClick={() => {
-                              if (!isBatchingEligible) {
-                                setSafeguardDetails({
-                                  isOpen: true,
-                                  type: 'send_to_kitchen',
-                                  title: `Order #${ord.id} Requires Approval`,
-                                  confirmQuestion: `Are you sure about this action? Order #${ord.id} is currently ${!isApproved ? 'under review / waiting approval' : 'missing payment proof'}. Sending to production will authorize this order for commissary fulfillment.`,
-                                  warningNotice: 'Order requires finance approval and payment proof verification.',
-                                  confirmText: "Yes, Authorize & Send to Production",
-                                  branchName: ord.branchName,
-                                  orderId: ord.id,
-                                  quantity: totalUnits,
-                                  onConfirm: () => {
-                                    if (!isApproved) {
-                                      approveOrder(ord.id, true);
-                                    }
-                                    produceForOrder(ord.id, undefined, undefined, true);
-                                  },
-                                });
-                                return;
-                              }
+                              if (!isBatchingEligible) return;
                               setSafeguardDetails({
                                 isOpen: true,
                                 type: 'send_to_kitchen',
@@ -595,9 +597,7 @@ export const AdminProduction: React.FC = () => {
                                 branchName: ord.branchName,
                                 orderId: ord.id,
                                 quantity: totalUnits,
-                                onConfirm: () => {
-                                  produceForOrder(ord.id);
-                                },
+                                onConfirm: () => produceForOrder(ord.id),
                               });
                             }}
                             className={`w-full sm:w-auto px-3.5 py-2 rounded-xl text-xs font-bold shadow-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${

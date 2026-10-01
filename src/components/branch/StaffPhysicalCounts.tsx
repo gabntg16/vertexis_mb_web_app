@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import { businessDate } from '../../../functions/src/transactionModel';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useData } from '../../context/DataContext';
 import {
   ClipboardCheck,
@@ -25,6 +26,7 @@ export const StaffPhysicalCounts: React.FC<StaffPhysicalCountsProps> = ({ onNavi
     currentUser,
     currentBranch,
     products,
+    inventory,
     dailyShiftLogs,
     addPhysicalCountsToDailyLog,
     themeMode,
@@ -32,7 +34,7 @@ export const StaffPhysicalCounts: React.FC<StaffPhysicalCountsProps> = ({ onNavi
 
   const isDark = themeMode === 'dark';
   const branchId = currentUser?.branchId || currentBranch?.id || 'b-legazpi';
-  const today = new Date().toISOString().split('T')[0];
+  const today = businessDate();
 
   // Retrieve today's log or fallback to default
   const todayLog = useMemo(() => {
@@ -45,95 +47,13 @@ export const StaffPhysicalCounts: React.FC<StaffPhysicalCountsProps> = ({ onNavi
   const isReturned = currentStatus === DailyLogStatus.RETURNED_FOR_REVISION;
   const isEditable = !isLocked && !isPending;
 
-  // Initialize count state (Purely Gourmet Marshmallow inventory)
-  const [counts, setCounts] = useState<DailyPhysicalCountItem[]>(() => {
-    if (todayLog && todayLog.physicalCounts && todayLog.physicalCounts.length > 0) {
-      return todayLog.physicalCounts.filter(
-        (c) => !c.productId.startsWith('f') && !c.productId.startsWith('pkg')
-      );
-    }
-
-    // Default template for Legazpi City frontline staff - 7 signature gourmet marshmallow flavors
-    return [
-      {
-        productId: 'p1',
-        productName: 'Gourmet Marshmallow',
-        flavor: 'Oreo Cookies',
-        category: 'marshmallows',
-        beginningCount: 45,
-        endingCount: 33,
-        unit: 'packs',
-        variance: 0,
-        notes: '',
-      },
-      {
-        productId: 'p2',
-        productName: 'Gourmet Marshmallow',
-        flavor: 'Dried Mango & Mango Flavor',
-        category: 'marshmallows',
-        beginningCount: 38,
-        endingCount: 29,
-        unit: 'packs',
-        variance: 0,
-        notes: '',
-      },
-      {
-        productId: 'p3',
-        productName: 'Gourmet Marshmallow',
-        flavor: 'Caramel Macchiato & Biscoff',
-        category: 'marshmallows',
-        beginningCount: 50,
-        endingCount: 41,
-        unit: 'packs',
-        variance: -1,
-        notes: '',
-      },
-      {
-        productId: 'p4',
-        productName: 'Gourmet Marshmallow',
-        flavor: 'Strawberry & Cheesecake Flavor',
-        category: 'marshmallows',
-        beginningCount: 35,
-        endingCount: 27,
-        unit: 'packs',
-        variance: 0,
-        notes: '',
-      },
-      {
-        productId: 'p5',
-        productName: 'Gourmet Marshmallow',
-        flavor: 'Ube Jam & Flavor',
-        category: 'marshmallows',
-        beginningCount: 40,
-        endingCount: 31,
-        unit: 'packs',
-        variance: 0,
-        notes: '',
-      },
-      {
-        productId: 'p6',
-        productName: 'Gourmet Marshmallow',
-        flavor: 'Matcha Powder',
-        category: 'marshmallows',
-        beginningCount: 28,
-        endingCount: 23,
-        unit: 'packs',
-        variance: 0,
-        notes: '',
-      },
-      {
-        productId: 'p7',
-        productName: 'Gourmet Marshmallow',
-        flavor: 'Blueberry Powder & Sour Strips',
-        category: 'marshmallows',
-        beginningCount: 25,
-        endingCount: 22,
-        unit: 'packs',
-        variance: 0,
-        notes: '',
-      },
-    ];
-  });
+  const dirty = useRef(false);
+  const [counts, setCounts] = useState<DailyPhysicalCountItem[]>([]);
+  useEffect(() => {
+    if (dirty.current) return;
+    if (todayLog?.physicalCounts.length) setCounts(todayLog.physicalCounts);
+    else setCounts(products.map(product => ({ productId: product.id, productName: product.name, flavor: product.flavor, category: 'marshmallows', beginningCount: inventory.find(i => i.branchId === branchId && i.productId === product.id)?.stock || 0, endingCount: Number.NaN, unit: 'packs', notes: '' })));
+  }, [todayLog, products, inventory, branchId]);
 
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -149,6 +69,7 @@ export const StaffPhysicalCounts: React.FC<StaffPhysicalCountsProps> = ({ onNavi
 
   const handleEndingCountChange = (productId: string, val: number) => {
     if (!isEditable) return;
+    dirty.current = true;
     setCounts((prev) =>
       prev.map((item) => {
         if (item.productId === productId) {
@@ -166,13 +87,15 @@ export const StaffPhysicalCounts: React.FC<StaffPhysicalCountsProps> = ({ onNavi
 
   const handleNotesChange = (productId: string, notes: string) => {
     if (!isEditable) return;
+    dirty.current = true;
     setCounts((prev) =>
       prev.map((item) => (item.productId === productId ? { ...item, notes } : item))
     );
   };
 
-  const handleSaveDraft = () => {
-    const res = addPhysicalCountsToDailyLog(counts);
+  const handleSaveDraft = async () => {
+    if (counts.some(item => !Number.isSafeInteger(item.endingCount) || item.endingCount < 0)) { setFeedback({ text: 'Enter a whole-number closing count for each product.', type: 'error' }); return; }
+    const res = await addPhysicalCountsToDailyLog(counts);
     if (res.success) {
       const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       setLastSavedTime(timeStr);
@@ -339,7 +262,7 @@ export const StaffPhysicalCounts: React.FC<StaffPhysicalCountsProps> = ({ onNavi
           </thead>
           <tbody className="divide-y divide-neutral-200/70 dark:divide-neutral-800 text-xs sm:text-sm">
             {filteredItems.map((item) => {
-              const diff = item.endingCount - item.beginningCount;
+              const diff = Number.isFinite(item.endingCount) ? item.endingCount - item.beginningCount : 0;
               return (
                 <tr key={item.productId} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 transition-colors">
                   <td className="py-3.5 px-4 font-semibold text-neutral-900 dark:text-white">
@@ -359,9 +282,11 @@ export const StaffPhysicalCounts: React.FC<StaffPhysicalCountsProps> = ({ onNavi
                       <input
                         type="number"
                         min="0"
-                        value={item.endingCount}
+                        step="1"
+                        aria-label={`Closing count for ${item.flavor}`}
+                        value={Number.isFinite(item.endingCount) ? item.endingCount : ''}
                         disabled={!isEditable}
-                        onChange={(e) => handleEndingCountChange(item.productId, parseInt(e.target.value) || 0)}
+                        onChange={(e) => handleEndingCountChange(item.productId, e.target.value === '' ? Number.NaN : Number(e.target.value))}
                         className={`w-20 px-2 py-1.5 text-center font-mono font-bold rounded-lg border text-sm transition-all ${
                           isEditable
                             ? 'bg-white dark:bg-[#121212] border-neutral-300 dark:border-neutral-700 focus:ring-2 focus:ring-[#80C7F2] text-neutral-900 dark:text-white'

@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import { isOrderReadyForDispatch } from '../utils/dispatchEligibility';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useData } from '../context/DataContext';
 import marshbitesLogo from '../assets/images/marshbites_logo.jpg';
 import {
@@ -45,37 +46,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const {
     currentUser,
     currentBranch,
+    inboundReceipts,
     pendingOrdersCount,
     readyForDispatchOrdersCount,
-    deliveries,
     orders,
+    deliveries,
     dailyShiftLogs,
   } = useData();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const mobileDialogRef = useRef<HTMLDialogElement>(null);
 
-  if (!currentUser) return null;
+  useEffect(() => {
+    if (!isMobileOpen) return;
+    const dialog = mobileDialogRef.current;
+    if (!dialog) return;
+    const previousFocus = document.activeElement;
+    dialog.showModal();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const closeOnDesktop = () => {
+      if (desktop.matches) setIsMobileOpen(false);
+    };
+    desktop.addEventListener('change', closeOnDesktop);
+    closeOnDesktop();
+    return () => {
+      desktop.removeEventListener('change', closeOnDesktop);
+      document.body.style.overflow = previousOverflow;
+      dialog.close();
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
+    };
+  }, [isMobileOpen, setIsMobileOpen]);
 
   const isSuper = isSuperAdmin(currentUser);
   const isManager = isBranchManager(currentUser);
   const isStaff = isBranchStaff(currentUser);
 
   // Badge counts
-  const branchInTransitCount = !isSuper && currentBranch
-    ? (deliveries || []).filter((d) => {
-        const order = (orders || []).find((o) => o.id === d.orderId);
-        return order?.branchId === currentBranch.id && d.status === 'inTransit';
-      }).length
-    : 0;
-
   const branchReadyOrdersCount = !isSuper && currentBranch
     ? (orders || []).filter(
         (o) =>
           o.branchId === currentBranch.id &&
-          (o.productionStage === 'ready_for_dispatch' || (o.productionStage as string) === 'ready') &&
-          !o.isDispatched &&
-          o.status !== 'completed' &&
-          o.status !== 'rejected'
+          isOrderReadyForDispatch(o, deliveries)
       ).length
     : 0;
 
@@ -84,8 +97,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const bId = currentUser?.branchId || currentBranch?.id || 'b-legazpi';
     return (dailyShiftLogs || []).filter(
       (l) => l.branchId === bId && l.status === DailyLogStatus.PENDING_VALIDATION
-    ).length;
-  }, [dailyShiftLogs, currentUser, currentBranch]);
+    ).length + inboundReceipts.filter(r => r.branchId === bId && r.status === 'pending').length;
+  }, [dailyShiftLogs, inboundReceipts, currentUser, currentBranch]);
 
   // Current shift status for branch staff badge
   const today = new Date().toISOString().split('T')[0];
@@ -95,16 +108,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return log?.status || DailyLogStatus.DRAFT;
   }, [dailyShiftLogs, currentUser, currentBranch, today]);
 
+  if (!currentUser) return null;
+
   // 1. BRANCH_STAFF Navigation: Render ONLY Frontline Tabs
   const staffTabs = [
-    { id: 'staff_dashboard', label: 'Operations Dashboard', icon: LayoutDashboard },
+    { id: 'staff_dashboard', label: 'My Shift Dashboard', icon: LayoutDashboard },
     { id: 'physical_counts', label: 'Daily Physical Counts', icon: ClipboardCheck },
     { id: 'manual_sales', label: 'Manual Sales Entry', icon: Receipt },
     { id: 'spoilage_wastage', label: 'Spoilage / Wastage', icon: Trash2 },
     { id: 'inbound_receiving', label: 'Inbound Receiving', icon: PackageCheck },
     {
       id: 'shift_summary',
-      label: 'Shift Summary & Approval',
+      label: 'Shift Summary',
       icon: FileCheck,
       badge:
         staffShiftStatus === DailyLogStatus.RETURNED_FOR_REVISION
@@ -127,18 +142,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // 2. BRANCH_MANAGER Navigation: Render Store Leadership & Audit Tabs
   const managerTabs = [
-    { id: 'branch_analytics', label: 'Branch Dashboard & Analytics', icon: TrendingUp },
-    { id: 'current_stock', label: 'Current Branch Stock', icon: Boxes },
+    { id: 'branch_analytics', label: 'Branch Dashboard', icon: TrendingUp },
+    { id: 'current_stock', label: 'Current Stock', icon: Boxes },
     {
       id: 'log_validation',
-      label: 'Log Validation Dashboard',
+      label: 'Staff & Receiving Approvals',
       icon: ShieldCheck,
       badge: pendingValidationCount > 0 ? pendingValidationCount : undefined,
       badgeColor: 'bg-[#F37021] text-white',
     },
     {
       id: 'requisitions',
-      label: 'Create Requisition & Upload Payment',
+      label: 'Stock Orders & Payment',
       icon: ShoppingBag,
       badge: branchReadyOrdersCount > 0 ? branchReadyOrdersCount : undefined,
       badgeColor: 'bg-emerald-500 text-white',
@@ -147,10 +162,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // 3. SUPER_ADMIN Navigation: Render HQ Executive & Network Tabs
   const adminPrimaryTabs = [
-    { id: 'network_analytics', label: 'Network Dashboard & Analytics', icon: TrendingUp },
+    { id: 'network_analytics', label: 'Network Dashboard', icon: TrendingUp },
     {
       id: 'requisition_approval',
-      label: 'Requisition & Payment Approval',
+      label: 'Order & Payment Approval',
       icon: ShoppingBag,
       badge:
         pendingOrdersCount + readyForDispatchOrdersCount > 0
@@ -166,7 +181,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const adminSecondaryTabs = [
     { id: 'production', label: 'Commissary Batching', icon: ChefHat },
-    { id: 'branches', label: '19 Branches', icon: Building2 },
+    { id: 'branches', label: 'Branches', icon: Building2 },
+    { id: 'sales', label: 'Sales History', icon: Receipt },
+    { id: 'calendar', label: 'Calendar', icon: Calendar },
     {
       id: 'logistics',
       label: 'Fleet & Dispatch',
@@ -223,9 +240,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const RoleIcon = currentRoleConfig.icon;
 
   const sidebarContent = (
-    <div className="flex flex-col h-full select-none">
+    <div className="flex flex-col h-full min-h-0">
       {/* Brand Header */}
-      <div className="p-4 sm:p-5 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between gap-3">
+      <div className={`border-b border-neutral-200/80 dark:border-neutral-800 flex items-center gap-3 ${isCollapsed && !isMobileOpen ? 'flex-col px-2 py-4' : 'justify-between p-4'}`}>
         <div className="flex items-center space-x-3 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-white dark:bg-neutral-800 flex items-center justify-center shadow-xs overflow-hidden border border-neutral-200 dark:border-neutral-700 p-0.5 shrink-0">
             <img
@@ -267,6 +284,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={() => setIsMobileOpen(false)}
           className="lg:hidden p-1.5 rounded-xl text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800"
           title="Close Sidebar"
+          aria-label="Close navigation"
         >
           <X className="w-5 h-5" />
         </button>
@@ -277,6 +295,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="hidden lg:flex p-1.5 rounded-xl text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800"
           title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+          aria-label={isCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+          aria-expanded={!isCollapsed}
         >
           {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </button>
@@ -304,11 +324,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         ? 'Branch Manager'
                         : 'Branch Staff'}
                     </span>
-                    <span
-                      className={`text-[9px] font-bold px-1 rounded font-mono ${currentRoleConfig.badge}`}
-                    >
-                      {currentRoleConfig.label}
-                    </span>
                   </div>
                   <span className="text-[10px] text-neutral-500 dark:text-neutral-400 block truncate mt-0.5">
                     {currentUser.name} • {isSuper ? 'Legazpi HQ' : currentBranch?.name?.replace('Marsh Bites - ', '') || 'Legazpi'}
@@ -322,14 +337,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Navigation List */}
-      <div id="tour-sidebar-nav" className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar-thin">
+      <nav aria-label="Main navigation" id="tour-sidebar-nav" className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-1 scrollbar-thin">
         {(!isCollapsed || isMobileOpen) && (
           <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 px-3 py-1.5">
             {isStaff
               ? 'Frontline Ground Operations'
               : isManager
-              ? 'Store Leadership & Audit'
-              : 'HQ Executive Operations'}
+              ? 'Branch Operations'
+              : 'Head Office'}
           </p>
         )}
 
@@ -342,12 +357,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               key={tab.id}
               id={`nav-tab-${tab.id}`}
               onClick={() => handleTabClick(tab.id)}
-              className={`mallow-nav-item w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all group ${
+              className={`mallow-nav-item w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all group ${
                 isActive
                   ? 'mallow-nav-item-active bg-[#80C7F2] text-neutral-950 font-bold shadow-xs'
                   : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-950 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800/80'
               }`}
               title={tab.label}
+              aria-label={tab.badge !== undefined ? `${tab.label}, ${tab.badge}` : tab.label}
+              aria-current={isActive ? 'page' : undefined}
             >
               <div className="flex items-center space-x-3 min-w-0">
                 <Icon
@@ -356,7 +373,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   }`}
                 />
                 {(!isCollapsed || isMobileOpen) && (
-                  <span className="truncate text-left">{tab.label}</span>
+                  <span className="text-left leading-snug">{tab.label}</span>
                 )}
               </div>
 
@@ -389,12 +406,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   key={tab.id}
                   id={`nav-tab-${tab.id}`}
                   onClick={() => handleTabClick(tab.id)}
-                  className={`mallow-nav-item w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all group ${
+                  className={`mallow-nav-item w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all group ${
                     isActive
                       ? 'mallow-nav-item-active bg-[#80C7F2] text-neutral-950 font-bold shadow-xs'
                       : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-950 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800/80'
                   }`}
                   title={tab.label}
+                  aria-label={tab.badge !== undefined ? `${tab.label}, ${tab.badge}` : tab.label}
+                  aria-current={isActive ? 'page' : undefined}
                 >
                   <div className="flex items-center space-x-3 min-w-0">
                     <Icon
@@ -403,7 +422,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       }`}
                     />
                     {(!isCollapsed || isMobileOpen) && (
-                      <span className="truncate text-left">{tab.label}</span>
+                      <span className="text-left leading-snug">{tab.label}</span>
                     )}
                   </div>
                   {tab.badge !== undefined && (!isCollapsed || isMobileOpen) && (
@@ -421,7 +440,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         )}
 
-      </div>
+      </nav>
     </div>
   );
 
@@ -433,23 +452,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
           isCollapsed ? 'w-18' : 'w-64 xl:w-72'
         }`}
       >
-        {sidebarContent}
+        {!isMobileOpen && sidebarContent}
       </aside>
 
       {/* Mobile / Tablet Slide-Over Drawer with Backdrop */}
       {isMobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
-            onClick={() => setIsMobileOpen(false)}
-          />
-
-          {/* Slide-in Drawer */}
+        <dialog
+          ref={mobileDialogRef}
+          id="mobile-navigation"
+          aria-label="Main navigation"
+          className="fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none border-0 bg-transparent p-0 backdrop:bg-black/60 backdrop:backdrop-blur-xs"
+          onCancel={() => setIsMobileOpen(false)}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setIsMobileOpen(false);
+          }}
+        >
           <div className="mallow-sidebar relative w-4/5 max-w-xs h-full border-r shadow-2xl z-10 flex flex-col animate-in slide-in-from-left duration-200">
             {sidebarContent}
           </div>
-        </div>
+        </dialog>
       )}
     </>
   );

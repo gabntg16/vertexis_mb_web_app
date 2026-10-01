@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import { isOrderReadyForDispatch } from '../utils/dispatchEligibility';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { acceptedInboundUnits, assertReviewable, InboundReceipt, InboundSubmission, receiptId, validateInboundSubmission } from '../../functions/src/inboundReceivingModel';
+import { submitInboundReceiptRemote, reviewInboundReceiptRemote } from '../services/inboundReceiving';
+import { isBranchManager, isSuperAdmin } from '../utils/securityValidator';
+import { commitTransaction, inspectedProofRevisions } from '../services/transactionCommands';
+import { packageTotal, paymentReady, wholeQuantity, businessDate } from '../../functions/src/transactionModel';
 import { doc, runTransaction } from 'firebase/firestore';
 import {
   UserModel,
@@ -69,7 +75,7 @@ import { firestoreSync, SyncState } from '../services/firestoreSync';
 import { auth, db, isFirebaseConfigured } from '../lib/firebase';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { resolveMyProfile } from '../services/accountProvisioning';
-import { provisionUser, resetUserPassword } from '../services/accountProvisioning';
+import { provisionUser, provisionApplicationAccount, resetUserPassword } from '../services/accountProvisioning';
 import {
   idempotencyManager,
   validateStateTransition,
@@ -444,6 +450,9 @@ interface DataContextType {
   orders: Order[];
   deliveries: Delivery[];
   receivings: Receiving[];
+  inboundReceipts: InboundReceipt[];
+  submitInboundReceipt: (input: InboundSubmission) => Promise<{ success: boolean; error?: string }>;
+  reviewInboundReceipt: (id: string, revision: number, decision: 'approved' | 'returned', notes: string) => Promise<{ success: boolean; error?: string }>;
   inventory: InventoryItem[];
   sales: Sale[];
   announcements: Announcement[];
@@ -487,7 +496,7 @@ interface DataContextType {
     managerEmail: string;
     managerGovId: string;
     documents?: BranchDocument[];
-  }) => BranchApplication;
+  }) => Promise<BranchApplication>;
   updateApplicationStatus: (applicationId: string, status: ApplicationStatus, notes?: string, remarks?: string) => void;
   verifyDocument: (docId: string, status: DocumentVerificationStatus, remarks?: string) => void;
   approveBranchApplication: (applicationId: string) => Promise<{
@@ -556,7 +565,7 @@ interface DataContextType {
     packageName?: string,
     packageTier?: 'silver' | 'gold' | 'platinum',
     clientRequestId?: string
-  ) => Order | null;
+  ) => Promise<Order | null>;
   uploadPaymentProof: (
     orderId: string,
     proofUrl: string,
@@ -567,10 +576,10 @@ interface DataContextType {
       status?: PaymentGatewayStatus;
     }
   ) => void;
-  approveOrder: (orderId: string, allowAdminOverride?: boolean) => void;
-  rejectOrder: (orderId: string, reason: string) => void;
-  approvePaymentProof: (orderId: string, approverName?: string, remarks?: string) => void;
-  rejectPaymentProof: (orderId: string, rejectionReason: string, rejectorName?: string) => void;
+  approveOrder: (orderId: string, allowAdminOverride?: boolean) => Promise<void>;
+  rejectOrder: (orderId: string, reason: string) => Promise<void>;
+  approvePaymentProof: (orderId: string, approverName?: string, remarks?: string) => Promise<void>;
+  rejectPaymentProof: (orderId: string, rejectionReason: string, rejectorName?: string) => Promise<void>;
   confirmStockArrival: (orderId: string, receiverName?: string, conditionNotes?: string) => void;
   deleteOrder: (orderId: string) => void;
   archiveOrder: (orderId: string) => void;
@@ -595,7 +604,7 @@ interface DataContextType {
       dispatchedProducts?: OrderItem[];
       clientRequestId?: string;
     }
-  ) => Delivery;
+  ) => Promise<Delivery>;
   updateDeliveryStatus: (deliveryId: string, status: DeliveryStatus, deliveredAt?: string) => void;
   cancelDelivery: (deliveryId: string, reason?: string) => void;
   createReceiving: (deliveryId: string, receiverName?: string, conditionNotes?: string, notes?: string) => Receiving;
@@ -785,19 +794,19 @@ interface DataContextType {
   interBranchTransfers: InterBranchTransfer[];
   getDailyLogForBranch: (branchId: string, date?: string) => DailyShiftLog | undefined;
   saveDailyLogDraft: (logData: Partial<DailyShiftLog>) => void;
-  submitDailyLogForValidation: (logId: string) => { success: boolean; error?: string };
-  validateAndLockDailyLog: (logId: string, managerNotes?: string) => { success: boolean; error?: string };
+  submitDailyLogForValidation: (logId: string) => Promise<{ success: boolean; error?: string }>;
+  validateAndLockDailyLog: (logId: string, managerNotes?: string) => Promise<{ success: boolean; error?: string }>;
   addManualSalesToDailyLog: (salesList: { productId: string; productName: string; flavor: string; unitsSold: number; unitPrice: number }[]) => { success: boolean; error?: string };
-  addPhysicalCountsToDailyLog: (counts: DailyPhysicalCountItem[]) => { success: boolean; error?: string };
-  addSpoilageToDailyLog: (spoilage: Omit<DailySpoilageItem, 'id'>) => { success: boolean; error?: string };
-  removeSpoilageFromDailyLog: (spoilageId: string) => { success: boolean; error?: string };
-  addInboundToDailyLog: (receiving: Omit<DailyInboundReceivingItem, 'id' | 'verifiedAt'> | Array<Omit<DailyInboundReceivingItem, 'id' | 'verifiedAt'>>) => { success: boolean; error?: string };
-  removeInboundFromDailyLog: (inboundId: string) => { success: boolean; error?: string };
-  removeInboundManifestFromDailyLog: (manifestNumber: string) => { success: boolean; error?: string };
-  rejectAndReturnDailyLog: (logId: string, reason: string) => { success: boolean; error?: string };
+  addPhysicalCountsToDailyLog: (counts: DailyPhysicalCountItem[]) => Promise<{ success: boolean; error?: string }>;
+  addSpoilageToDailyLog: (spoilage: Omit<DailySpoilageItem, 'id'>) => Promise<{ success: boolean; error?: string }>;
+  removeSpoilageFromDailyLog: (spoilageId: string) => Promise<{ success: boolean; error?: string }>;
+  addInboundToDailyLog: (receiving: Omit<DailyInboundReceivingItem, 'id' | 'verifiedAt'> | Array<Omit<DailyInboundReceivingItem, 'id' | 'verifiedAt'>>) => Promise<{ success: boolean; error?: string }>;
+  removeInboundFromDailyLog: (inboundId: string) => Promise<{ success: boolean; error?: string }>;
+  removeInboundManifestFromDailyLog: (manifestNumber: string) => Promise<{ success: boolean; error?: string }>;
+  rejectAndReturnDailyLog: (logId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
   createInterBranchTransfer: (data: Omit<InterBranchTransfer, 'id' | 'createdAt'>) => { success: boolean; error?: string };
   updateTransferStatus: (transferId: string, status: InterBranchTransfer['status']) => void;
-  updateProductPricing: (productId: string, price: number, wholesalePrice?: number) => { success: boolean; error?: string };
+  updateProductPricing: (productId: string, price: number, wholesalePrice?: number) => Promise<{ success: boolean; error?: string }>;
   updateUserRole: (userId: string, newRole: Role | string, branchId?: string) => { success: boolean; error?: string };
   addNewUser: (user: Omit<UserModel, 'id'>) => { success: boolean; error?: string };
 }
@@ -807,37 +816,41 @@ const DataContext = createContext<DataContextType | null>(null);
 const STORAGE_KEY = 'vertexis_marshbites_data_v1';
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [users, setUsers] = useState<UserModel[]>(() => generateInitialUsers());
-  const [branches, setBranches] = useState<Branch[]>(() => INITIAL_BRANCHES);
-  const [products, setProducts] = useState<Product[]>(() => INITIAL_PRODUCTS);
-  const [orders, setOrders] = useState<Order[]>(() => generateInitialOrders());
-  const [deliveries, setDeliveries] = useState<Delivery[]>(() => generateInitialDeliveries());
-  const [receivings, setReceivings] = useState<Receiving[]>(() => generateInitialReceivings());
-  const [inventory, setInventory] = useState<InventoryItem[]>(() => generateInitialInventory());
-  const [sales, setSales] = useState<Sale[]>(() => generateInitialSales());
-  const [announcements, setAnnouncements] = useState<Announcement[]>(() => generateInitialAnnouncements());
-  const [events, setEvents] = useState<CalendarEvent[]>(() => generateInitialEvents());
-  const [productionBatches, setProductionBatches] = useState<ProductionBatch[]>(() => generateInitialProductionBatches());
-  const [spoilageRecords, setSpoilageRecords] = useState<SpoilageRecord[]>(() => generateInitialSpoilageRecords(INITIAL_BRANCHES, INITIAL_PRODUCTS));
-  const [physicalAudits, setPhysicalAudits] = useState<PhysicalInventoryAudit[]>(() => generateInitialPhysicalAudits(INITIAL_BRANCHES, INITIAL_PRODUCTS));
+  const [users, setUsers] = useState<UserModel[]>(() => isFirebaseConfigured ? [] : generateInitialUsers());
+  const [branches, setBranches] = useState<Branch[]>(() => isFirebaseConfigured ? [] : INITIAL_BRANCHES);
+  const [products, setProducts] = useState<Product[]>(() => isFirebaseConfigured ? [] : INITIAL_PRODUCTS);
+  const [orders, setOrders] = useState<Order[]>(() => isFirebaseConfigured ? [] : generateInitialOrders());
+  const [deliveries, setDeliveries] = useState<Delivery[]>(() => isFirebaseConfigured ? [] : generateInitialDeliveries());
+  const [receivings, setReceivings] = useState<Receiving[]>(() => isFirebaseConfigured ? [] : generateInitialReceivings());
+  const [inboundReceipts, setInboundReceipts] = useState<InboundReceipt[]>([]);
+  const inboundBusy = useRef(false);
+  const reviewedInboundIds = useRef(new Set<string>());
+  const [inventory, setInventory] = useState<InventoryItem[]>(() => isFirebaseConfigured ? [] : generateInitialInventory());
+  const [sales, setSales] = useState<Sale[]>(() => isFirebaseConfigured ? [] : generateInitialSales());
+  const [announcements, setAnnouncements] = useState<Announcement[]>(() => isFirebaseConfigured ? [] : generateInitialAnnouncements());
+  const [events, setEvents] = useState<CalendarEvent[]>(() => isFirebaseConfigured ? [] : generateInitialEvents());
+  const [productionBatches, setProductionBatches] = useState<ProductionBatch[]>(() => isFirebaseConfigured ? [] : generateInitialProductionBatches());
+  const [spoilageRecords, setSpoilageRecords] = useState<SpoilageRecord[]>(() => isFirebaseConfigured ? [] : generateInitialSpoilageRecords(INITIAL_BRANCHES, INITIAL_PRODUCTS));
+  const [physicalAudits, setPhysicalAudits] = useState<PhysicalInventoryAudit[]>(() => isFirebaseConfigured ? [] : generateInitialPhysicalAudits(INITIAL_BRANCHES, INITIAL_PRODUCTS));
   // Branch Management State
-  const [branchApplications, setBranchApplications] = useState<BranchApplication[]>(() => INITIAL_BRANCH_APPLICATIONS);
+  const [branchApplications, setBranchApplications] = useState<BranchApplication[]>(() => isFirebaseConfigured ? [] : INITIAL_BRANCH_APPLICATIONS);
   const [branchDocuments, setBranchDocuments] = useState<BranchDocument[]>(() => {
     const allDocs: BranchDocument[] = [];
+    if (isFirebaseConfigured) return allDocs;
     INITIAL_BRANCH_APPLICATIONS.forEach((app) => {
       if (app.documents) allDocs.push(...app.documents);
     });
     return allDocs;
   });
-  const [branchAccounts, setBranchAccounts] = useState<BranchAccount[]>(() => INITIAL_BRANCH_ACCOUNTS);
-  const [branchStatusHistory, setBranchStatusHistory] = useState<BranchStatusHistory[]>(() => INITIAL_BRANCH_STATUS_HISTORY);
-  const [branchAuditLogs, setBranchAuditLogs] = useState<BranchAuditLog[]>(() => INITIAL_BRANCH_AUDIT_LOGS);
+  const [branchAccounts, setBranchAccounts] = useState<BranchAccount[]>(() => isFirebaseConfigured ? [] : INITIAL_BRANCH_ACCOUNTS);
+  const [branchStatusHistory, setBranchStatusHistory] = useState<BranchStatusHistory[]>(() => isFirebaseConfigured ? [] : INITIAL_BRANCH_STATUS_HISTORY);
+  const [branchAuditLogs, setBranchAuditLogs] = useState<BranchAuditLog[]>(() => isFirebaseConfigured ? [] : INITIAL_BRANCH_AUDIT_LOGS);
 
   // BIR-Compliant Point of Sale State
-  const [birReceipts, setBirReceipts] = useState<BIRReceipt[]>(() => generateInitialBIRReceipts(INITIAL_BRANCHES, INITIAL_PRODUCTS));
-  const [shiftClosings, setShiftClosings] = useState<ShiftClosingRecord[]>(() => generateInitialShiftClosings(INITIAL_BRANCHES));
-  const [inventoryMovements, setInventoryMovements] = useState<InventoryMovementRecord[]>(() => generateInitialInventoryMovements(INITIAL_BRANCHES, INITIAL_PRODUCTS));
-  const [posAuditLogs, setPosAuditLogs] = useState<POSAuditLog[]>(() => generateInitialPOSAuditLogs(INITIAL_BRANCHES));
+  const [birReceipts, setBirReceipts] = useState<BIRReceipt[]>(() => isFirebaseConfigured ? [] : generateInitialBIRReceipts(INITIAL_BRANCHES, INITIAL_PRODUCTS));
+  const [shiftClosings, setShiftClosings] = useState<ShiftClosingRecord[]>(() => isFirebaseConfigured ? [] : generateInitialShiftClosings(INITIAL_BRANCHES));
+  const [inventoryMovements, setInventoryMovements] = useState<InventoryMovementRecord[]>(() => isFirebaseConfigured ? [] : generateInitialInventoryMovements(INITIAL_BRANCHES, INITIAL_PRODUCTS));
+  const [posAuditLogs, setPosAuditLogs] = useState<POSAuditLog[]>(() => isFirebaseConfigured ? [] : generateInitialPOSAuditLogs(INITIAL_BRANCHES));
   const [registerShift, setRegisterShift] = useState<{
     isOpened: boolean;
     openedAt?: string;
@@ -854,21 +867,52 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 3-Tier RBAC Shift Logs & Lateral Transfers State
   const [dailyShiftLogs, setDailyShiftLogs] = useState<DailyShiftLog[]>(() =>
-    generateInitialDailyShiftLogs()
+    isFirebaseConfigured ? [] : generateInitialDailyShiftLogs()
   );
   const [interBranchTransfers, setInterBranchTransfers] = useState<InterBranchTransfer[]>(() =>
-    generateInitialInterBranchTransfers()
+    isFirebaseConfigured ? [] : generateInitialInterBranchTransfers()
   );
 
   const [currentUser, setCurrentUser] = useState<UserModel | null>(null);
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
-  const [syncState, setSyncState] = useState<SyncState>({ status: 'syncing', lastSyncedAt: null });
+  const [syncGeneration, setSyncGeneration] = useState(0);
+  const [syncState, setSyncState] = useState<SyncState>({ status: 'local', lastSyncedAt: null });
 
   useEffect(() => {
     let cancelled = false;
     let profileRequest = 0;
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       const requestId = ++profileRequest;
+      if (isFirebaseConfigured) {
+        firestoreSync.cleanup(true);
+        inspectedProofRevisions.clear();
+        setCurrentUser(null);
+        setUsers([]);
+        setBranches([]);
+        setProducts([]);
+        setOrders([]);
+        setDeliveries([]);
+        setReceivings([]);
+        setInboundReceipts([]);
+        setInventory([]);
+        setSales([]);
+        setAnnouncements([]);
+        setEvents([]);
+        setProductionBatches([]);
+        setSpoilageRecords([]);
+        setPhysicalAudits([]);
+        setBranchApplications([]);
+        setBranchDocuments([]);
+        setBranchAccounts([]);
+        setBranchStatusHistory([]);
+        setBranchAuditLogs([]);
+        setBirReceipts([]);
+        setShiftClosings([]);
+        setInventoryMovements([]);
+        setPosAuditLogs([]);
+        setDailyShiftLogs([]);
+        setInterBranchTransfers([]);
+      }
       if (!firebaseUser?.email) {
         setCurrentUser(null);
         return;
@@ -894,14 +938,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 1. Listen for Firestore sync state changes
   useEffect(() => {
-    const unsub = firestoreSync.onSyncStateChange((s) => setSyncState(s));
+    const unsub = firestoreSync.onSyncStateChange((s) => setSyncState(
+      !isFirebaseConfigured || !auth.currentUser ? { status: 'local', lastSyncedAt: null } : s
+    ));
     return unsub;
   }, []);
 
   // 2. Load LocalStorage as initial cache & subscribe to Firestore real-time updates
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = isFirebaseConfigured ? null : localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.users) setUsers(parsed.users);
@@ -910,6 +956,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (parsed.orders) setOrders(parsed.orders);
         if (parsed.deliveries) setDeliveries(parsed.deliveries);
         if (parsed.receivings) setReceivings(parsed.receivings);
+        if (parsed.inboundReceipts) setInboundReceipts(parsed.inboundReceipts);
         if (parsed.inventory) setInventory(parsed.inventory);
         if (parsed.sales) setSales(parsed.sales);
         if (parsed.announcements) setAnnouncements(parsed.announcements);
@@ -935,7 +982,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Could not parse localStorage data', e);
     }
 
-    if (!auth.currentUser || !currentUser) return;
+    if (!isFirebaseConfigured || !auth.currentUser || !currentUser) {
+      setSyncState({ status: 'local', lastSyncedAt: null });
+      return;
+    }
 
     const isAdmin = currentUser.role === 'admin' || currentUser.role === Role.SUPER_ADMIN;
     if (!isAdmin) {
@@ -951,8 +1001,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       : currentUser.branchId
       ? { role: 'branch' as const, branchId: currentUser.branchId, userId: auth.currentUser.uid }
       : null;
-    if (!scope) return;
+    if (!scope) {
+      setSyncState({ status: 'offline', lastSyncedAt: null, error: 'No branch assignment is available for cloud sync.' });
+      return;
+    }
 
+    const syncTimeout = setTimeout(() => {
+      setSyncState(previous => previous.status === 'syncing'
+        ? { ...previous, status: 'offline', error: 'Cloud connection is taking longer than expected. Showing available data.' }
+        : previous);
+    }, 15000);
     const unsubFirestore = firestoreSync.subscribeAll({
       onBranches: (b) => setBranches(b),
       onUsers: (u) => setUsers(u),
@@ -960,6 +1018,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       onOrders: (o) => setOrders(o),
       onDeliveries: (d) => setDeliveries(d),
       onReceivings: (r) => setReceivings(r),
+      onInboundReceipts: setInboundReceipts,
       onInventory: (i) => setInventory(i),
       onSales: (s) => setSales(s),
       onAnnouncements: (a) => setAnnouncements(a),
@@ -976,34 +1035,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       onShiftClosings: (sc) => setShiftClosings(sc),
       onSpoilageRecords: (records) => setSpoilageRecords(records),
       onPhysicalAudits: (audits) => setPhysicalAudits(audits),
+      onDailyShiftLogs: setDailyShiftLogs,
     }, scope);
 
-    if (isAdmin) {
-      void firestoreSync.seedInitialDatasetIfEmpty({
-        branches: INITIAL_BRANCHES,
-        products: INITIAL_PRODUCTS,
-        orders: generateInitialOrders(),
-        deliveries: generateInitialDeliveries(),
-        receivings: generateInitialReceivings(),
-        inventory: generateInitialInventory(),
-        sales: generateInitialSales(),
-        announcements: generateInitialAnnouncements(),
-        events: generateInitialEvents(),
-        productionBatches: generateInitialProductionBatches(),
-        branchApplications: INITIAL_BRANCH_APPLICATIONS,
-        branchAccounts: INITIAL_BRANCH_ACCOUNTS,
-        branchStatusHistory: INITIAL_BRANCH_STATUS_HISTORY,
-        branchAuditLogs: INITIAL_BRANCH_AUDIT_LOGS,
-      });
-    }
 
     return () => {
+      clearTimeout(syncTimeout);
       unsubFirestore();
     };
-  }, [currentUser?.id, currentUser?.role, currentUser?.branchId]);
+  }, [currentUser?.id, currentUser?.role, currentUser?.branchId, syncGeneration]);
 
-  // 3. Cache to LocalStorage on state change
+  // Demo data only; never persist cloud records across user sessions.
   useEffect(() => {
+    if (isFirebaseConfigured) return;
     try {
       const stateToSave = {
         users,
@@ -1012,6 +1056,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         orders,
         deliveries,
         receivings,
+        inboundReceipts,
         inventory,
         sales,
         announcements,
@@ -1045,6 +1090,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     orders,
     deliveries,
     receivings,
+    inboundReceipts,
     inventory,
     sales,
     announcements,
@@ -1115,6 +1161,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchUser = (userId: string) => {
+    if (isFirebaseConfigured) throw new Error('Sign out and sign in with the other account.');
     const u = users.find((x) => x.id === userId);
     if (u) {
       setCurrentUser(u);
@@ -1217,7 +1264,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const submitBranchApplication = useCallback(
-    (data: {
+    async (data: {
       branchName: string;
       businessType: BranchBusinessType | string;
       address: string;
@@ -1229,7 +1276,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       managerEmail: string;
       managerGovId: string;
       documents?: BranchDocument[];
-    }): BranchApplication => {
+    }): Promise<BranchApplication> => {
       const normalizedName = data.branchName.trim().toLowerCase();
       const normalizedAddress = data.address.trim().toLowerCase();
       const normalizedEmail = data.email.trim().toLowerCase();
@@ -1283,32 +1330,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         managerPhone: data.managerPhone,
         managerEmail: data.managerEmail,
         managerGovId: data.managerGovId,
-        documents: data.documents || [],
+        documents: (data.documents || []).map(document => ({ ...document, applicationId: appId, branchId: appId })),
         status: 'Pending Review',
         submittedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
-      setBranchApplications((prev) => [newApp, ...prev]);
-      firestoreSync.saveDoc('branch_applications', newApp.id, newApp);
-
-      if (data.documents && data.documents.length > 0) {
-        data.documents.forEach((d) => {
-          firestoreSync.saveDoc('branch_documents', d.id, d);
-        });
-        setBranchDocuments((prev) => [...data.documents!, ...prev]);
-      }
-
-      logBranchAudit(
-        'Application Submitted',
-        `New franchise branch application submitted for "${data.branchName}" (${branchCode}) by applicant ${data.managerName}.`,
-        appId,
-        data.branchName
-      );
+      const audit: BranchAuditLog = {
+        id: `audit-${appId}`,
+        branchId: appId,
+        branchName: data.branchName,
+        action: 'Application Submitted',
+        user: currentUser?.name || 'HQ Admin',
+        timestamp: newApp.submittedAt,
+        remarks: `New franchise branch application submitted for "${data.branchName}" (${branchCode}) by applicant ${data.managerName}.`,
+      };
+      await firestoreSync.saveBranchApplication(newApp, audit);
+      setBranchApplications(prev => [newApp, ...prev.filter(item => item.id !== newApp.id)]);
+      setBranchDocuments(prev => [...newApp.documents, ...prev.filter(item => !newApp.documents.some(document => document.id === item.id))]);
+      setBranchAuditLogs(prev => [audit, ...prev.filter(item => item.id !== audit.id)]);
 
       return newApp;
     },
-    [branches, branchApplications, logBranchAudit]
+    [branches, branchApplications, currentUser]
   );
 
   const verifyDocument = useCallback(
@@ -1430,14 +1474,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (app.status === 'Approved' || app.approvedBranchId) {
         throw new Error('This branch application has already been approved. Refresh the branch list before continuing.');
       }
-      if (branches.some((branch) => branch.code.toLowerCase() === app.branchCode.toLowerCase())) {
+      if (branches.some((branch) => branch.applicationId !== app.id && branch.code.toLowerCase() === app.branchCode.toLowerCase())) {
         throw new Error(`Branch code ${app.branchCode} is already in use. Update the application before approving it.`);
       }
 
-      const slug = app.branchName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-      let branchId = `b-${slug}`;
+      const slug = app.branchName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || app.id;
+      let branchId = branches.find(branch => branch.applicationId === app.id)?.id || `b-${slug}`;
       let counter = 1;
-      while (branches.some((b) => b.id === branchId)) {
+      while (branches.some((b) => b.id === branchId && b.applicationId !== app.id)) {
         branchId = `b-${slug}-${counter++}`;
       }
 
@@ -1494,17 +1538,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: now,
       };
 
+      // The provisioning Function requires an existing branch document.
+      await firestoreSync.prepareBranchForApproval(newBranch);
       const [managerProvision, staffProvision] = await Promise.all([
-        provisionUser({
-          name: `${app.managerName} (${app.branchName} Manager)`,
+        provisionApplicationAccount({
+          name: app.managerName,
           email: app.managerEmail || `${slug}@marshbites.com`,
           role: 'branch',
           branchId,
           branchRole: 'Branch Manager',
           phone: app.managerPhone,
         }),
-        provisionUser({
-          name: `${app.branchName} Counter Staff`,
+        provisionApplicationAccount({
+          name: `${app.branchName} Counter Staff`.slice(0, 120),
           email: `staff.${slug}@marshbites.com`,
           role: 'branch',
           branchId,
@@ -1552,21 +1598,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         timestamp: now,
       };
 
-      // Update States
-      setBranches((prev) => [...prev, newBranch]);
-      setUsers((prev) => [...prev, managerUser]);
-      setBranchAccounts((prev) => [...prev, managerAccount, staffAccount]);
-      setInventory((prev) => [...prev, ...newInvItems]);
-      setBranchApplications((prev) => prev.map((a) => (a.id === app.id ? updatedApp : a)));
-      setBranchStatusHistory((prev) => [statusHist, ...prev]);
-
-      // Firestore Writes
-      firestoreSync.saveDoc('branches', newBranch.id, newBranch);
-      firestoreSync.saveDoc('branch_accounts', managerAccount.id, managerAccount);
-      firestoreSync.saveDoc('branch_accounts', staffAccount.id, staffAccount);
-      firestoreSync.saveDoc('branch_applications', updatedApp.id, updatedApp);
-      firestoreSync.saveDoc('branch_status_history', statusHist.id, statusHist);
-      newInvItems.forEach((inv) => firestoreSync.saveDoc('inventory', inv.id, inv));
+      const linkedDocuments = app.documents.map(document => ({ ...document, applicationId: app.id, branchId }));
+      updatedApp.documents = linkedDocuments;
+      await firestoreSync.saveApprovalRecords([
+        { collection: 'branches', id: branchId, data: newBranch },
+        { collection: 'branch_applications', id: app.id, data: updatedApp },
+        { collection: 'branch_status_history', id: statusHist.id, data: statusHist },
+        ...newInvItems.map(item => ({ collection: 'inventory', id: item.id, data: item })),
+        ...linkedDocuments.map(document => ({ collection: 'branch_documents', id: document.id, data: document })),
+      ]);
+      // Provisioning already persists account records; don't overwrite server fields.
+      setBranches(prev => [...prev.filter(branch => branch.id !== branchId), newBranch]);
+      setUsers(prev => [...prev.filter(user => ![managerUser.id, staffProvision.user.id].includes(user.id)), managerUser, staffProvision.user]);
+      setBranchAccounts(prev => [...prev.filter(account => ![managerAccount.id, staffAccount.id].includes(account.id)), managerAccount, staffAccount]);
+      setInventory(prev => [...prev.filter(item => !newInvItems.some(created => created.id === item.id)), ...newInvItems]);
+      setBranchApplications(prev => prev.map(application => application.id === app.id ? updatedApp : application));
+      setBranchStatusHistory(prev => [statusHist, ...prev.filter(history => history.id !== statusHist.id)]);
+      setBranchDocuments(prev => [...prev.filter(document => !linkedDocuments.some(linked => linked.id === document.id)), ...linkedDocuments]);
 
       logBranchAudit(
         'Branch Approved',
@@ -1583,7 +1631,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         staffPasswordResetLink: staffProvision.passwordResetLink,
       };
     },
-    [branchApplications, branches, products, currentUser, logBranchAudit, provisionUser]
+    [branchApplications, branches, products, currentUser, logBranchAudit]
   );
 
   const setBranchStatus = useCallback(
@@ -2134,6 +2182,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     notes?: string;
     clientRequestId?: string;
   }): ProductionBatch => {
+    if (isFirebaseConfigured) throw new Error('This legacy action cannot save cloud transactions. Use the current sales, commissary or receiving approval screen.');
     const clientRequestId = payload.clientRequestId || generateClientRequestId('req_batch');
     const lock = idempotencyManager.acquireLock(clientRequestId);
     if (!lock.acquired) {
@@ -2193,6 +2242,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateBatchStage = (batchId: string, stage: BatchStage) => {
+    if (isFirebaseConfigured) throw new Error('This legacy action cannot save cloud transactions. Use the current sales, commissary or receiving approval screen.');
     const existing = productionBatches.find((b) => b.id === batchId);
     if (existing) {
       if (existing.stage === stage) {
@@ -2241,12 +2291,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const updateOrderProductionStage = (
+  const updateOrderProductionStage = async (
     orderId: string,
     stage: ProductionStage,
     batchCode?: string,
     allowOverride?: boolean
   ) => {
+    if (isFirebaseConfigured) {
+      const result = await commitTransaction('production.stage', { orderId, stage });
+      setOrders(prev => prev.map(o => o.id === orderId ? result.order! : o));
+      if (result.batches?.length) setProductionBatches(prev => [...result.batches!, ...prev.filter(b => !result.batches!.some(n => n.id === b.id))]);
+      return;
+    }
     const targetOrder = orders.find((o) => o.id === orderId);
     if (!targetOrder) {
       console.warn(`[DataContext] Order #${orderId} not found in active orders. Stage update skipped.`);
@@ -2269,26 +2325,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    if (stage !== 'queued' && !allowOverride) {
-      if (targetOrder.status !== 'approved' || !targetOrder.proofImagePath || targetOrder.proofImagePath.trim() === '') {
-        console.warn(`[DataContext] Cannot advance MTO stage for order ${orderId}: Order must be approved with verified payment proof.`);
-        return;
-      }
-    }
+    if (!isSuperAdmin(currentUser) || !paymentReady(targetOrder)) throw new Error('HQ must verify payment before production.');
 
     setOrders((prev) =>
       prev.map((o) => {
         if (o.id === orderId) {
-          const defaultAdminProof = 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80';
           const updated = {
             ...o,
             productionStage: stage,
             batchCode: batchCode || o.batchCode,
-            status: allowOverride && o.status !== 'approved' ? 'approved' : o.status,
-            proofImagePath: allowOverride && (!o.proofImagePath || o.proofImagePath.trim() === '')
-              ? defaultAdminProof
-              : o.proofImagePath,
-            paymentStatus: allowOverride && o.paymentStatus !== 'SUCCESSFUL' ? 'SUCCESSFUL' : o.paymentStatus,
+
           };
           firestoreSync.saveDoc('orders', orderId, updated);
           return updated;
@@ -2327,7 +2373,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const produceForOrder = (orderId: string, chefName?: string, clientRequestId?: string, allowOverride = false) => {
+  const produceForOrder = async (orderId: string, chefName?: string, clientRequestId?: string, allowOverride = false) => {
+    if (isFirebaseConfigured) {
+      const result = await commitTransaction('production.start', { orderId, chefName: chefName || '' });
+      setOrders(prev => prev.map(o => o.id === orderId ? result.order! : o));
+      if (result.batches?.length) setProductionBatches(prev => [...result.batches!, ...prev.filter(b => !result.batches!.some(n => n.id === b.id))]);
+      return;
+    }
     const reqId = clientRequestId || generateClientRequestId(`req_prod_${orderId}`);
     const lock = idempotencyManager.acquireLock(reqId);
     if (!lock.acquired) {
@@ -2341,30 +2393,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error(`Order #${orderId} not found.`);
       }
 
-      if (!allowOverride) {
-        validateStateTransition('Order', orderId, targetOrder.status, ['approved'], 'Send to Kitchen / Cook MTO');
-      }
-
-      if (!allowOverride && (!targetOrder.proofImagePath || targetOrder.proofImagePath.trim() === '')) {
-        console.warn(`[DataContext] Cannot start commissary batching for order ${orderId}: Order must be approved and payment proof verified.`);
-        throw new Error('Order must be approved with verified payment proof before commissary batching.');
-      }
-
-      const defaultAdminProof = 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80';
-      if (allowOverride && (targetOrder.status !== 'approved' || !targetOrder.proofImagePath || targetOrder.proofImagePath.trim() === '')) {
-        const authorizedOrder: Order = {
-          ...targetOrder,
-          status: 'approved',
-          proofImagePath: targetOrder.proofImagePath || defaultAdminProof,
-          paymentStatus: targetOrder.paymentStatus === 'SUCCESSFUL' ? 'SUCCESSFUL' : 'SUCCESSFUL',
-          paymentRemarks: targetOrder.paymentRemarks || 'Super Admin commissary direct authorization override',
-          paymentVerifiedBy: targetOrder.paymentVerifiedBy || (currentUser?.name || 'Super Admin (HQ)'),
-          paymentVerifiedAt: targetOrder.paymentVerifiedAt || new Date().toISOString(),
-          productionStage: targetOrder.productionStage === 'queued' ? 'in_kettle' : targetOrder.productionStage || 'in_kettle',
-        };
-        setOrders((prev) => prev.map((o) => (o.id === orderId ? authorizedOrder : o)));
-        firestoreSync.saveDoc('orders', orderId, authorizedOrder);
-      }
+      if (!isSuperAdmin(currentUser) || !paymentReady(targetOrder)) throw new Error('HQ must verify payment before production.');
 
       // Check if batches already exist for this order to prevent double-cooking
       const existingForOrder = productionBatches.filter((b) => b.targetOrderId === orderId);
@@ -2387,7 +2416,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         targetOrderId: targetOrder.id,
         targetBranchName: targetOrder.branchName,
         stage: 'in_kettle',
-        chefName: chefName || (idx % 2 === 0 ? 'Chef Dante (Head Confectioner)' : 'Chef Maria (Bicol Fluff Artisan)'),
+        chefName: chefName || currentUser?.name || 'Commissary',
         startedAt: now.toISOString(),
         notes: `Made-to-order fresh cook for ${targetOrder.branchName} #${targetOrder.id}`,
       }));
@@ -2412,6 +2441,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addProductionStock = (branchId: string, productId: string, quantity: number, clientRequestId?: string) => {
+    if (isFirebaseConfigured) throw new Error('This legacy action cannot save cloud transactions. Use the current sales, commissary or receiving approval screen.');
     const reqId = clientRequestId || generateClientRequestId('req_alloc');
     const lock = idempotencyManager.acquireLock(reqId);
     if (!lock.acquired) {
@@ -2455,13 +2485,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const createOrder = (
+  const createOrder = async (
     items: { productId: string; productName: string; quantity: number; unitPrice: number }[],
     customTotal?: number,
     packageName?: string,
     packageTier?: 'silver' | 'gold' | 'platinum',
     clientRequestId?: string
-  ): Order | null => {
+  ): Promise<Order | null> => {
+    if (!isBranchManager(currentUser)) throw new Error('Only branch managers can place orders.');
+    if (isFirebaseConfigured) {
+      const result = await commitTransaction('order.create', { items: items.map(i => ({ productId: i.productId, quantity: i.quantity })), ...(packageTier ? { packageTier } : {}) });
+      if (!result.order) throw new Error('Order was not confirmed.');
+      setOrders(prev => [result.order!, ...prev.filter(o => o.id !== result.order!.id)]);
+      return result.order;
+    }
+    for (const item of items) wholeQuantity(item.quantity);
+    if (!items.length) throw new Error('Choose at least one product.');
     if (!currentUser || !currentUser.branchId) return null;
     const branch = getBranch(currentUser.branchId);
     if (!branch) return null;
@@ -2477,11 +2516,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const computedTotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-      const finalTotal = customTotal !== undefined && customTotal > 0 ? customTotal : computedTotal;
+      const finalTotal = packageTier ? packageTotal(packageTier, items.reduce((sum, item) => sum + item.quantity, 0)) : computedTotal;
       const shortBranch = branch.name.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase();
       const orderIdSuffix = Date.now().toString().slice(-4);
       const newOrder: Order = {
-        id: `ord-${Date.now().toString().slice(-6)}`,
+        id: `ord-${crypto.randomUUID()}`,
         branchId: branch.id,
         branchName: branch.name,
         status: 'pending',
@@ -2504,7 +2543,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const uploadPaymentProof = (
+  const uploadPaymentProof = async (
     orderId: string,
     proofUrl: string,
     paymentDetails?: {
@@ -2514,12 +2553,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status?: PaymentGatewayStatus;
     }
   ) => {
+    if (!isBranchManager(currentUser)) throw new Error('Only branch managers can submit payment proofs.');
+    if (isFirebaseConfigured) {
+      const result = await commitTransaction('payment.submit', { orderId, proof: proofUrl, paymentMethod: paymentDetails?.paymentMethod || 'bank_transfer', referenceNumber: paymentDetails?.referenceNumber || '' });
+      setOrders(prev => prev.map(o => o.id === orderId ? result.order! : o));
+      return;
+    }
     const targetOrder = orders.find((o) => o.id === orderId);
     if (!targetOrder) {
       throw new Error(`Order #${orderId} not found.`);
     }
 
-    if (targetOrder.status === 'completed' || targetOrder.status === 'dispatched') {
+    if (!['pending', 'waitingApproval'].includes(targetOrder.status)) {
       throw new Error(`Order #${orderId} has already progressed to ${targetOrder.status}. Payment proof cannot be re-uploaded.`);
     }
 
@@ -2534,8 +2579,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             paymentMethod: paymentDetails?.paymentMethod || o.paymentMethod || 'bank_transfer',
             paymentIntentId: paymentDetails?.paymentIntentId || o.paymentIntentId,
             paymentReference: paymentDetails?.referenceNumber || o.paymentReference,
-            paymentStatus: paymentDetails?.status || 'PENDING',
-            paymentCompletedAt: paymentDetails?.status === 'SUCCESSFUL' ? nowIso : o.paymentCompletedAt,
+            paymentStatus: 'PENDING',
+            paymentVerifiedAt: undefined, paymentVerifiedBy: undefined, paymentCompletedAt: undefined,
           };
           firestoreSync.saveDoc('orders', orderId, updated);
           return updated;
@@ -2545,117 +2590,34 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
-  const approveOrder = (orderId: string, allowAdminOverride = false) => {
-    const targetOrder = orders.find((o) => o.id === orderId);
-    if (!targetOrder) {
-      throw new Error(`Order #${orderId} not found.`);
+  const approveOrder = async (orderId: string, _allowAdminOverride = false) => {
+    if (!isSuperAdmin(currentUser)) throw new Error('Only HQ can approve payments and orders.');
+    const target = orders.find(o => o.id === orderId);
+    if (!target?.proofImagePath) throw new Error('Inspect the uploaded payment proof before approving.');
+    if (isFirebaseConfigured) {
+      const proofRevision = inspectedProofRevisions.get(orderId);
+      if (!proofRevision) throw new Error('Open and inspect the latest payment proof before approving.');
+      const result = await commitTransaction('payment.approve', { orderId, proofRevision });
+      setOrders(prev => prev.map(o => o.id === orderId ? result.order! : o));
+      return;
     }
-
-    if (!allowAdminOverride) {
-      validateStateTransition('Order', orderId, targetOrder.status, ['waitingApproval', 'pending'], 'Approve Order');
-    }
-
-    if (!allowAdminOverride && (!targetOrder.proofImagePath || targetOrder.proofImagePath.trim() === '')) {
-      console.warn(`[DataContext] Cannot approve order ${orderId}: Payment proof required before approval.`);
-      throw new Error('Payment proof required before approval.');
-    }
-
-    const defaultAdminProof = 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80';
-    const nowIso = new Date().toISOString();
-    const updatedOrder: Order = {
-      ...targetOrder,
-      status: 'approved' as OrderStatus,
-      proofImagePath: targetOrder.proofImagePath || (allowAdminOverride ? defaultAdminProof : targetOrder.proofImagePath),
-      paymentStatus: targetOrder.paymentStatus === 'SUCCESSFUL' ? 'SUCCESSFUL' : (allowAdminOverride ? 'SUCCESSFUL' : targetOrder.paymentStatus || 'PENDING'),
-      paymentRemarks: targetOrder.paymentRemarks || (allowAdminOverride ? 'Super Admin commissary direct override authorization' : undefined),
-      paymentVerifiedBy: targetOrder.paymentVerifiedBy || (allowAdminOverride ? (currentUser?.name || 'Super Admin (HQ)') : undefined),
-      paymentVerifiedAt: targetOrder.paymentVerifiedAt || (allowAdminOverride ? nowIso : undefined),
-      productionStage: targetOrder.productionStage === 'queued' ? 'in_kettle' : targetOrder.productionStage || 'in_kettle',
-    };
-    setOrders((prev) => prev.map((o) => (o.id === orderId ? updatedOrder : o)));
-    firestoreSync.saveDoc('orders', orderId, updatedOrder);
-
-    // Automatically trigger Made-to-Order kitchen batches if not already triggered
-    const existingBatches = productionBatches.filter((b) => b.targetOrderId === orderId);
-    if (existingBatches.length === 0) {
-      produceForOrder(orderId, undefined, undefined, allowAdminOverride);
-    }
-
-    // Increment branch inventory
-    targetOrder.items.forEach((item) => {
-      setInventory((prev) => {
-        const idx = prev.findIndex((i) => i.branchId === targetOrder.branchId && i.productId === item.productId);
-        if (idx !== -1) {
-          const updatedInv = { ...prev[idx], stock: prev[idx].stock + item.quantity };
-          firestoreSync.saveDoc('inventory', prev[idx].id, updatedInv);
-          return prev.map((invItem, i) => (i === idx ? updatedInv : invItem));
-        } else {
-          const newInv: InventoryItem = {
-            id: `inv-${targetOrder.branchId}-${item.productId}`,
-            branchId: targetOrder.branchId,
-            productId: item.productId,
-            productName: item.productName,
-            stock: item.quantity,
-          };
-          firestoreSync.saveDoc('inventory', newInv.id, newInv);
-          return [...prev, newInv];
-        }
-      });
-    });
+    if (!['pending', 'waitingApproval'].includes(target.status)) throw new Error('This order has already been reviewed.');
+    const updated: Order = { ...target, status: 'approved', paymentStatus: 'SUCCESSFUL', paymentVerifiedBy: currentUser!.name, paymentVerifiedAt: new Date().toISOString(), productionStage: 'queued' };
+    setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    logBranchAudit('Payment approved', `Payment verified for order ${orderId}. Production is now available.`, target.branchId, target.branchName);
   };
 
-  const approvePaymentProof = (orderId: string, approverName?: string, remarks?: string) => {
-    const target = orders.find((o) => o.id === orderId);
-    if (!target) throw new Error(`Order #${orderId} not found`);
-    const nowIso = new Date().toISOString();
-    const approver = approverName || currentUser?.name || 'Super Admin (HQ)';
-
-    const updated: Order = {
-      ...target,
-      status: 'approved',
-      paymentStatus: 'SUCCESSFUL',
-      paymentRemarks: remarks || 'Payment proof verified and approved by HQ Finance.',
-      paymentVerifiedBy: approver,
-      paymentVerifiedAt: nowIso,
-      productionStage: target.productionStage === 'queued' ? 'in_kettle' : target.productionStage || 'in_kettle',
-    };
-
-    setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
-    firestoreSync.saveDoc('orders', orderId, updated);
-
-    // Trigger made-to-order kitchen batching if not already started
-    const existingBatches = productionBatches.filter((b) => b.targetOrderId === orderId);
-    if (existingBatches.length === 0) {
-      produceForOrder(orderId);
-    }
-
-    const ann: Announcement = {
-      id: `ann-pop-approved-${orderId}-${Date.now()}`,
-      title: `💳 Payment Approved for Order #${orderId}`,
-      message: `Payment proof for Order #${orderId} (${target.branchName}) was verified by ${approver}. Order is approved and queued for Commissary production.`,
-      createdAt: nowIso,
-      kind: 'order',
-      priority: 'success',
-      scope: 'branch',
-      targetBranchId: target.branchId,
-      targetBranchName: target.branchName,
-      targetAudience: ['admin', 'branch_manager'],
-      authorName: approver,
-      authorRole: 'HQ Finance Officer',
-      actionUrl: 'orders',
-    };
-    setAnnouncements((prev) => [ann, ...prev]);
-    firestoreSync.saveDoc('announcements', ann.id, ann);
-
-    logBranchAudit(
-      'Payment Proof Approved',
-      `Proof of Payment for Requisition #${orderId} (₱${target.totalAmount.toLocaleString()}) approved by ${approver}. Reference: ${target.paymentReference || 'N/A'}. Order status changed to Approved.`,
-      target.branchId,
-      target.branchName
-    );
+  const approvePaymentProof = async (orderId: string, _approverName?: string, _remarks?: string) => {
+    await approveOrder(orderId);
   };
 
-  const rejectPaymentProof = (orderId: string, rejectionReason: string, rejectorName?: string) => {
+  const rejectPaymentProof = async (orderId: string, rejectionReason: string, rejectorName?: string) => {
+    if (!isSuperAdmin(currentUser)) throw new Error('Only HQ can reject payment proofs.');
+    if (isFirebaseConfigured) {
+      const result = await commitTransaction('payment.reject', { orderId, reason: rejectionReason });
+      setOrders(prev => prev.map(o => o.id === orderId ? result.order! : o));
+      return;
+    }
     const target = orders.find((o) => o.id === orderId);
     if (!target) throw new Error(`Order #${orderId} not found`);
     const nowIso = new Date().toISOString();
@@ -2703,9 +2665,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     receiverName?: string,
     conditionNotes?: string
   ) => {
+    if (isFirebaseConfigured) throw new Error('This legacy action cannot save cloud transactions. Use the current sales, commissary or receiving approval screen.');
     const targetOrder = orders.find((o) => o.id === orderId);
     if (!targetOrder) throw new Error(`Order #${orderId} not found`);
     if (targetOrder.status === 'completed') return;
+    if (inboundReceipts.some(r => r.orderId === orderId)) throw new Error('Review the submitted receipt in Receiving approvals.');
 
     const nowIso = new Date().toISOString();
     const receiver = receiverName || currentUser?.name || 'Branch Receiving Staff';
@@ -2828,7 +2792,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     firestoreSync.saveDoc('announcements', ann.id, ann);
   };
 
-  const rejectOrder = (orderId: string, reason: string) => {
+  const rejectOrder = async (orderId: string, reason: string) => {
+    if (!isSuperAdmin(currentUser)) throw new Error('Only HQ can reject orders.');
+    if (isFirebaseConfigured) {
+      const result = await commitTransaction('order.reject', { orderId, reason });
+      setOrders(prev => prev.map(o => o.id === orderId ? result.order! : o));
+      return;
+    }
     const targetOrder = orders.find((o) => o.id === orderId);
     if (!targetOrder) {
       throw new Error(`Order #${orderId} not found.`);
@@ -2848,25 +2818,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
-  const deleteOrder = (orderId: string) => {
-    setOrders((prev) => prev.filter((o) => o.id !== orderId));
-    firestoreSync.removeDoc('orders', orderId);
+  const archiveOrder = async (orderId: string) => {
+    if (!isSuperAdmin(currentUser)) throw new Error('Only HQ can archive orders.');
+    if (isFirebaseConfigured) {
+      const result = await commitTransaction('order.archive', { orderId });
+      setOrders(prev => prev.map(order => order.id === orderId ? result.order! : order));
+      return;
+    }
+    const target = orders.find(order => order.id === orderId);
+    if (!target || !['completed', 'rejected', 'canceled'].includes(target.status)) throw new Error('Close or reject the order before archiving it.');
+    setOrders(prev => prev.map(order => order.id === orderId ? { ...order, isArchived: true } : order));
   };
+  // Keep the public API compatible while preserving transaction and proof history.
+  const deleteOrder = archiveOrder;
 
-  const archiveOrder = (orderId: string) => {
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          const updated: Order = { ...o, isArchived: true, status: 'completed' };
-          firestoreSync.saveDoc('orders', orderId, updated);
-          return updated;
-        }
-        return o;
-      })
-    );
-  };
-
-  const createDelivery = (
+  const createDelivery = async (
     orderId: string,
     address: string,
     courierName?: string,
@@ -2887,7 +2853,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       dispatchedProducts?: OrderItem[];
       clientRequestId?: string;
     }
-  ): Delivery => {
+  ): Promise<Delivery> => {
+    if (!isSuperAdmin(currentUser)) throw new Error('Only HQ can dispatch orders.');
+    if (isFirebaseConfigured) {
+      const result = await commitTransaction('delivery.create', { orderId, address, courierName, trackingNumber, scheduledAt, notes, extra: extra || {} });
+      if (!result.delivery || !result.order) throw new Error('Dispatch was not confirmed.');
+      setDeliveries(prev => [result.delivery!, ...prev.filter(d => d.id !== result.delivery!.id)]);
+      setOrders(prev => prev.map(o => o.id === orderId ? result.order! : o));
+      return result.delivery;
+    }
     const reqId = extra?.clientRequestId || generateClientRequestId(`req_del_${orderId}`);
     const lock = idempotencyManager.acquireLock(reqId);
     if (!lock.acquired) {
@@ -2906,9 +2880,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Check if an active delivery already exists for this order
       const existingDel = deliveries.find((d) => d.orderId === orderId && d.status !== 'canceled');
       if (existingDel) {
-        console.warn(`[DataContext] Active delivery #${existingDel.id} already exists for order #${orderId}.`);
-        idempotencyManager.markCompleted(reqId, existingDel);
-        return existingDel;
+        throw new Error(`Order #${orderId} already has shipment #${existingDel.id} (${existingDel.status}). Open its shipment details instead of dispatching again.`);
       }
 
       const generatedTracking = trackingNumber || extra?.waybillNumber || `MB-TRACK-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -2999,7 +2971,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const updateDeliveryStatus = (deliveryId: string, status: DeliveryStatus, deliveredAt?: string) => {
+  const updateDeliveryStatus = async (deliveryId: string, status: DeliveryStatus, deliveredAt?: string) => {
+    if (isFirebaseConfigured) {
+      const result = await commitTransaction('delivery.status', { deliveryId, status });
+      setDeliveries(prev => prev.map(d => d.id === deliveryId ? result.delivery! : d));
+      setOrders(prev => prev.map(o => o.id === result.order?.id ? result.order : o));
+      return;
+    }
     setDeliveries((prev) =>
       prev.map((d) => {
         if (d.id === deliveryId) {
@@ -3050,7 +3028,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const cancelDelivery = (deliveryId: string, reason?: string) => {
+  const cancelDelivery = async (deliveryId: string, reason?: string) => {
+    if (isFirebaseConfigured) {
+      const result = await commitTransaction('delivery.cancel', { deliveryId, reason: reason || '' });
+      setDeliveries(prev => prev.map(d => d.id === deliveryId ? result.delivery! : d));
+      setOrders(prev => prev.map(o => o.id === result.order?.id ? result.order : o));
+      return;
+    }
     setDeliveries((prev) =>
       prev.map((d) => {
         if (d.id === deliveryId) {
@@ -3141,6 +3125,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     receiverName: string,
     conditionNotes: string
   ) => {
+    if (inboundReceipts.some(r => r.deliveryId === deliveryId)) throw new Error('Review the submitted receipt in Receiving approvals.');
     const del = deliveries.find((d) => d.id === deliveryId);
     const order = orders.find((o) => o.id === (orderId || del?.orderId));
     const targetBranchId = del?.branchId || order?.branchId || currentUser?.branchId || '';
@@ -3330,12 +3315,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     paymentMethod: 'Cash' | 'GCash' | 'Bank Transfer';
     paymentReference?: string;
   }): Promise<{ success: boolean; sale?: Sale; error?: string }> => {
+    if (isFirebaseConfigured) {
+      try {
+        const result = await commitTransaction('sale.create', payload);
+        if (!result.sale) throw new Error('Sale was not confirmed.');
+        setSales(prev => [result.sale!, ...prev.filter(s => s.id !== result.sale!.id)]);
+        setInventory(prev => prev.map(i => i.id === result.inventoryId ? { ...i, stock: result.stock!, currentStock: result.stock! } : i));
+        return { success: true, sale: result.sale };
+      } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Sale could not be confirmed. Retry without changing the form.' }; }
+    }
     if (!currentUser?.branchId) {
       return { success: false, error: 'You must be assigned to a branch to record a sale.' };
     }
 
-    const quantity = Math.floor(Number(payload.quantity));
-    if (!Number.isFinite(quantity) || quantity <= 0) {
+    const quantity = Number(payload.quantity);
+    if (!Number.isSafeInteger(quantity) || quantity <= 0) {
       return { success: false, error: 'Quantity sold must be a whole number greater than zero.' };
     }
 
@@ -3673,7 +3667,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       date,
       description,
       type,
-      branchId,
+      branchId: branchId || 'ALL',
       branchName,
     };
     setEvents((prev) => [...prev, newEvt]);
@@ -3686,6 +3680,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const forceSyncCloud = useCallback(async () => {
+    if (isFirebaseConfigured) {
+      if (!auth.currentUser) { setSyncState({ status: 'error', lastSyncedAt: null, error: 'Sign in again to reconnect.' }); return; }
+      setSyncGeneration(value => value + 1);
+      return;
+    }
     try {
       setSyncState({ status: 'syncing', lastSyncedAt: new Date() });
 
@@ -3696,12 +3695,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         orders,
         deliveries,
         receivings,
+        inboundReceipts,
         inventory,
         sales,
         announcements,
         events,
         productionBatches,
         branchApplications,
+        dailyShiftLogs,
+        interBranchTransfers,
         branchDocuments,
         branchAccounts,
         branchStatusHistory,
@@ -3716,9 +3718,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         themeMode,
         currentUserId: currentUser?.id,
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      if (!isFirebaseConfigured) localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 
-      setSyncState({ status: 'connected', lastSyncedAt: new Date() });
+      setSyncState({ status: !isFirebaseConfigured || !auth.currentUser ? 'local' : 'connected', lastSyncedAt: new Date() });
     } catch (e: any) {
       console.warn('Cloud sync issue:', e);
       setSyncState({ status: 'offline', lastSyncedAt: null, error: e?.message || 'Sync error' });
@@ -3730,12 +3732,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     orders,
     deliveries,
     receivings,
+    inboundReceipts,
     inventory,
     sales,
     announcements,
     events,
     productionBatches,
     branchApplications,
+    dailyShiftLogs,
+    interBranchTransfers,
     branchDocuments,
     branchAccounts,
     branchStatusHistory,
@@ -3819,6 +3824,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     customerName?: string;
     clientRequestId?: string;
   }): { receipt: BIRReceipt; change: number } => {
+    if (isFirebaseConfigured) throw new Error('This legacy action cannot save cloud transactions. Use the current sales, commissary or receiving approval screen.');
     const clientRequestId = payload.clientRequestId || generateClientRequestId('req_pos');
     const lock = idempotencyManager.acquireLock(clientRequestId);
     if (!lock.acquired) {
@@ -4058,6 +4064,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     voidReason: string,
     clientRequestId?: string
   ): { success: boolean; message?: string; receipt?: BIRReceipt } => {
+    if (isFirebaseConfigured) return { success: false, message: 'Cloud sale corrections require a supported approval workflow. No records were changed.' };
     const reqId = clientRequestId || generateClientRequestId(`req_void_${receiptId}`);
     const lock = idempotencyManager.acquireLock(reqId);
     if (!lock.acquired) {
@@ -4172,6 +4179,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     itemProductIds?: string[],
     clientRequestId?: string
   ): { success: boolean; message?: string; refundAmount?: number } => {
+    if (isFirebaseConfigured) return { success: false, message: 'Cloud sale corrections require a supported approval workflow. No records were changed.' };
     const reqId = clientRequestId || generateClientRequestId(`req_refund_${receiptId}`);
     const lock = idempotencyManager.acquireLock(reqId);
     if (!lock.acquired) {
@@ -4307,7 +4315,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const getXReadingSummary = useCallback(
     (branchId?: string) => {
       const bId = branchId || currentUser?.branchId || currentBranch?.id || 'b-legazpi';
-      const todayIsoPrefix = new Date().toISOString().split('T')[0];
+      const todayIsoPrefix = businessDate();
       const receiptsToday = birReceipts.filter(
         (r) => r.branchId === bId && r.timestamp.startsWith(todayIsoPrefix)
       );
@@ -4521,6 +4529,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       notes?: string;
       clientRequestId?: string;
     }): SpoilageRecord => {
+    if (isFirebaseConfigured) throw new Error('This legacy action cannot save cloud transactions. Use the current sales, commissary or receiving approval screen.');
       const bId = payload.branchId || currentUser?.branchId || currentBranch?.id || 'b-legazpi';
       const branch = branches.find((b) => b.id === bId) || currentBranch || branches[0];
       const prod = products.find((p) => p.id === payload.productId);
@@ -4611,6 +4620,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       notes?: string;
       reconcileImmediately?: boolean;
     }): PhysicalInventoryAudit => {
+    if (isFirebaseConfigured) throw new Error('This legacy action cannot save cloud transactions. Use the current sales, commissary or receiving approval screen.');
       const bId = payload.branchId || currentUser?.branchId || currentBranch?.id || 'b-legazpi';
       const branch = branches.find((b) => b.id === bId) || currentBranch || branches[0];
       const nowIso = new Date().toISOString();
@@ -4727,6 +4737,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const reconcilePhysicalAudit = useCallback(
     (auditId: string, managerName?: string): PhysicalInventoryAudit => {
+    if (isFirebaseConfigured) throw new Error('This legacy action cannot save cloud transactions. Use the current sales, commissary or receiving approval screen.');
       const audit = physicalAudits.find((a) => a.id === auditId);
       if (!audit) throw new Error('Audit record not found');
       if (audit.status === 'Reconciled') return audit;
@@ -4806,9 +4817,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         (o) =>
           o.branchId === bId &&
           (o.status === 'approved' ||
-            o.status === 'dispatched' ||
-            o.status === 'pending' ||
-            o.status === 'waitingApproval')
+            o.status === 'dispatched')
       );
       activeOrders.forEach((o) => {
         o.items.forEach((item) => {
@@ -4846,7 +4855,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const branchRevenue = useCallback(
     (bId: string): number => {
-      const bSales = sales.filter((s) => s.branchId === bId);
+      const bSales = sales.filter((s) => s.branchId === bId && s.status !== 'voided' && s.status !== 'refunded');
       return bSales.reduce((acc, s) => acc + s.total, 0);
     },
     [sales]
@@ -4881,7 +4890,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const weeklyDemandAmountForBranch = (bId: string): number => {
     const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const recent = sales.filter((s) => s.branchId === bId && new Date(s.date) >= cutoff);
+    const recent = sales.filter((s) => s.branchId === bId && s.status !== 'voided' && s.status !== 'refunded' && new Date(s.date) >= cutoff && new Date(s.date) <= new Date());
     const sum = recent.reduce((acc, s) => acc + s.total, 0);
     return sum;
   };
@@ -4950,28 +4959,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   }, [products, orders]);
 
-  const totalRevenue = useMemo(() => sales.reduce((sum, s) => sum + s.total, 0), [sales]);
+  const totalRevenue = useMemo(() => sales.filter(s => s.status !== 'voided' && s.status !== 'refunded').reduce((sum, s) => sum + s.total, 0), [sales]);
   const pendingOrdersCount = useMemo(
     () => orders.filter((o) => o.status === 'waitingApproval' || o.status === 'pending').length,
     [orders]
   );
   const readyForDispatchOrdersCount = useMemo(
-    () =>
-      orders.filter(
-        (o) =>
-          (o.status === 'approved' || (o.productionStage as string) === 'ready_for_dispatch') &&
-          (o.productionStage === 'ready_for_dispatch' || (o.productionStage as string) === 'ready') &&
-          !o.isDispatched &&
-          o.status !== 'completed' &&
-          o.status !== 'rejected'
-      ).length,
-    [orders]
+    () => orders.filter(order => isOrderReadyForDispatch(order, deliveries)).length,
+    [orders, deliveries]
   );
 
   // 3-Tier RBAC Handlers
+  const saveCloudShift = useCallback(async (action: string, input: unknown) => {
+    try {
+      const result = await commitTransaction(action, input);
+      if (!result.log) throw new Error('Shift save was not confirmed.');
+      setDailyShiftLogs(prev => [result.log!, ...prev.filter(log => log.id !== result.log!.id)]);
+      return { success: true };
+    } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'The shift could not be saved. Please retry.' }; }
+  }, []);
+
   const getDailyLogForBranch = useCallback(
     (branchId: string, date?: string) => {
-      const targetDate = date || new Date().toISOString().split('T')[0];
+      const targetDate = date || businessDate();
       return dailyShiftLogs.find((l) => l.branchId === branchId && l.date === targetDate);
     },
     [dailyShiftLogs]
@@ -4990,7 +5000,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             id: logData.id || `shift-log-${Date.now()}`,
             branchId: logData.branchId || currentUser?.branchId || 'b-legazpi',
             branchName: logData.branchName || currentBranch?.name || 'Marsh Bites Legazpi',
-            date: logData.date || new Date().toISOString().split('T')[0],
+            date: logData.date || businessDate(),
             shiftType: logData.shiftType || 'regular',
             status: DailyLogStatus.DRAFT,
             submittedByStaffId: currentUser?.id || 'staff-1',
@@ -5010,7 +5020,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [currentUser, currentBranch]
   );
 
-  const submitDailyLogForValidation = useCallback((logId: string) => {
+  const submitDailyLogForValidation = useCallback(async (logId: string) => {
+      if (isFirebaseConfigured) return saveCloudShift('shift.submit', { logId });
     let success = false;
     let error: string | undefined;
 
@@ -5043,7 +5054,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [currentUser]);
 
   const validateAndLockDailyLog = useCallback(
-    (logId: string, managerNotes?: string) => {
+    async (logId: string, managerNotes?: string) => {
+      if (isFirebaseConfigured) return saveCloudShift('shift.approve', { logId, notes: managerNotes || '', revision: dailyShiftLogs.find(l => l.id === logId)?.revision || 0 });
       if (currentUser && (currentUser.role === Role.BRANCH_STAFF || currentUser.role === 'BRANCH_STAFF')) {
         return {
           success: false,
@@ -5083,11 +5095,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return { success, error };
     },
-    [currentUser]
+    [currentUser, dailyShiftLogs, saveCloudShift]
   );
 
   const rejectAndReturnDailyLog = useCallback(
-    (logId: string, reason: string) => {
+    async (logId: string, reason: string) => {
+      if (isFirebaseConfigured) return saveCloudShift('shift.return', { logId, notes: reason, revision: dailyShiftLogs.find(l => l.id === logId)?.revision || 0 });
       if (currentUser && (currentUser.role === Role.BRANCH_STAFF || currentUser.role === 'BRANCH_STAFF')) {
         return {
           success: false,
@@ -5133,13 +5146,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return { success, error };
     },
-    [currentUser]
+    [currentUser, dailyShiftLogs, saveCloudShift]
   );
 
   const addManualSalesToDailyLog = useCallback(
     (salesList: { productId: string; productName: string; flavor: string; unitsSold: number; unitPrice: number }[]) => {
       const branchId = currentUser?.branchId || 'b-legazpi';
-      const today = new Date().toISOString().split('T')[0];
+      const today = businessDate();
 
       setDailyShiftLogs((prev) => {
         const existing = prev.find((l) => l.branchId === branchId && l.date === today);
@@ -5201,9 +5214,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const addPhysicalCountsToDailyLog = useCallback(
-    (counts: DailyPhysicalCountItem[]) => {
+    async (counts: DailyPhysicalCountItem[]) => {
+      if (isFirebaseConfigured) return saveCloudShift('shift.counts', { items: counts });
       const branchId = currentUser?.branchId || 'b-legazpi';
-      const today = new Date().toISOString().split('T')[0];
+      const today = businessDate();
 
       setDailyShiftLogs((prev) => {
         const existing = prev.find((l) => l.branchId === branchId && l.date === today);
@@ -5244,9 +5258,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const addSpoilageToDailyLog = useCallback(
-    (spoilage: Omit<DailySpoilageItem, 'id'>) => {
+    async (spoilage: Omit<DailySpoilageItem, 'id'>) => {
+      if (isFirebaseConfigured) return saveCloudShift('shift.waste.add', spoilage);
       const branchId = currentUser?.branchId || 'b-legazpi';
-      const today = new Date().toISOString().split('T')[0];
+      const today = businessDate();
       const newEntry: DailySpoilageItem = {
         id: `spoil-${Date.now()}`,
         ...spoilage,
@@ -5300,9 +5315,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const removeSpoilageFromDailyLog = useCallback(
-    (spoilageId: string) => {
+    async (spoilageId: string) => {
+      if (isFirebaseConfigured) return saveCloudShift('shift.waste.remove', { entryId: spoilageId });
       const branchId = currentUser?.branchId || 'b-legazpi';
-      const today = new Date().toISOString().split('T')[0];
+      const today = businessDate();
 
       setDailyShiftLogs((prev) => {
         const existing = prev.find((l) => l.branchId === branchId && l.date === today);
@@ -5329,10 +5345,98 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [currentUser]
   );
 
+  const submitInboundReceipt = async (input: InboundSubmission) => {
+    if (inboundBusy.current) return { success: false, error: 'Another receipt is being saved. Please wait.' };
+    inboundBusy.current = true;
+    try {
+      const branchId = currentUser?.branchId;
+      if (!currentUser || !branchId) throw new Error('Sign in to a branch account.');
+      validateInboundSubmission(input);
+      let receipt: InboundReceipt;
+      if (isFirebaseConfigured) {
+        if (!auth.currentUser) throw new Error('Sign in again to submit receiving.');
+        receipt = (await submitInboundReceiptRemote(input)).data;
+      } else {
+        const normalized = input.manifestNumber.trim().toUpperCase();
+        const delivery = deliveries.find(d => d.branchId === branchId && (d.id === input.deliveryId || (!input.deliveryId && [d.waybillNumber, d.trackingNumber].some(v => v?.trim().toUpperCase() === normalized))));
+        if (input.deliveryId && !delivery) throw new Error('Delivery not found in this branch.');
+        if (delivery?.status === 'canceled') throw new Error('This delivery was canceled.');
+        const order = orders.find(o => o.id === delivery?.orderId);
+        if (delivery && (order?.status === 'completed' || receivings.some(r => r.deliveryId === delivery.id && r.status === 'received'))) throw new Error('Stock has already been received for this delivery.');
+        const id = receiptId(branchId, input.manifestNumber, delivery?.id);
+        const previous = inboundReceipts.find(r => r.id === id);
+        if (previous && previous.status !== 'returned') throw new Error('This manifest is already awaiting approval or added to stock.');
+        const items = input.items.map(item => {
+          const product = products.find(p => p.id === item.productId);
+          if (!product) throw new Error('Select an existing product for every line.');
+          return { ...item, productName: product.flavor || product.name };
+        });
+        receipt = { ...input, items, id, branchId, ...(delivery ? { deliveryId: delivery.id, orderId: delivery.orderId } : {}), status: 'pending', submittedBy: currentUser.id, submittedByName: currentUser.name, submittedAt: new Date().toISOString(), revision: (previous?.revision || 0) + 1 };
+      }
+      setInboundReceipts(prev => [receipt, ...prev.filter(r => r.id !== receipt.id)]);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Could not submit the receipt.' };
+    } finally { inboundBusy.current = false; }
+  };
+
+  const reviewInboundReceipt = async (id: string, revision: number, decision: 'approved' | 'returned', notes: string) => {
+    if (inboundBusy.current) return { success: false, error: 'Another receipt is being saved. Please wait.' };
+    inboundBusy.current = true;
+    try {
+      if (!currentUser?.branchId || !isBranchManager(currentUser)) throw new Error('Only the branch manager can review receipts.');
+      if (notes.length > 1000 || (decision === 'returned' && !notes.trim())) throw new Error('Enter a return reason (up to 1,000 characters).');
+      let reviewed: InboundReceipt;
+      if (isFirebaseConfigured) {
+        if (!auth.currentUser) throw new Error('Sign in again to review receiving.');
+        reviewed = (await reviewInboundReceiptRemote({ id, revision, decision, notes })).data;
+      } else {
+        const receipt = inboundReceipts.find(r => r.id === id);
+        if (!receipt) throw new Error('Receipt not found.');
+        assertReviewable(receipt, currentUser.branchId, revision);
+        if (reviewedInboundIds.current.has(`${id}:${revision}`)) throw new Error('This receipt has already been reviewed.');
+        const now = new Date().toISOString();
+        reviewed = { ...receipt, status: decision, reviewedAt: now, reviewedBy: currentUser.id, reviewedByName: currentUser.name, reviewNotes: notes.trim() };
+        if (decision === 'approved') {
+          const delivery = deliveries.find(d => d.id === receipt.deliveryId);
+          const order = orders.find(o => o.id === receipt.orderId);
+          if (receipt.deliveryId && (!delivery || delivery.branchId !== receipt.branchId || delivery.status === 'canceled')) throw new Error('The linked delivery is no longer valid.');
+          if (order?.status === 'completed' || (receipt.deliveryId && receivings.some(r => r.deliveryId === receipt.deliveryId && r.status === 'received'))) throw new Error('Stock has already been received for this delivery.');
+          const changes: InventoryItem[] = [];
+          const movements: InventoryMovementRecord[] = [];
+          for (const [productId, { productName, quantity }] of acceptedInboundUnits(receipt.items)) {
+            const matching = inventory.filter(i => i.branchId === receipt.branchId && i.productId === productId);
+            if (matching.length > 1) throw new Error(`Duplicate inventory rows for ${productName}. Resolve them before approving.`);
+            const existing = matching[0];
+            const previousStock = existing ? Number(existing.stock) : 0;
+            if (!Number.isFinite(previousStock)) throw new Error('The current stock is invalid.');
+            const newStock = previousStock + quantity;
+            changes.push({ ...existing, id: existing?.id || `inv-${receipt.branchId}-${productId}`, branchId: receipt.branchId, productId, productName, stock: newStock, currentStock: newStock });
+            movements.push({ id: `${id}-${encodeURIComponent(productId)}`, branchId: receipt.branchId, productId, productName, type: 'Stock In', quantity, previousStock, newStock, referenceNo: receipt.manifestNumber, performedBy: currentUser.name, timestamp: now, notes: 'Inbound receipt approved by branch manager.' });
+          }
+          setInventory(prev => [...prev.filter(i => !changes.some(c => c.id === i.id)), ...changes]);
+          setInventoryMovements(prev => [...movements, ...prev]);
+          reviewed.stockAppliedAt = now;
+          if (receipt.deliveryId) {
+            setDeliveries(prev => prev.map(d => d.id === receipt.deliveryId ? { ...d, status: 'delivered', deliveredAt: now } : d));
+            setOrders(prev => prev.map(o => o.id === receipt.orderId ? { ...o, status: 'completed', receivedAt: now, completedAt: now, isDispatched: true, isArchived: true } : o));
+            setReceivings(prev => [{ id, branchId: receipt.branchId, deliveryId: receipt.deliveryId!, orderId: receipt.orderId || '', status: 'received', createdAt: receipt.submittedAt, receivedAt: now, receiverName: currentUser.name }, ...prev.filter(r => r.deliveryId !== receipt.deliveryId)]);
+          }
+        }
+        reviewedInboundIds.current.add(`${id}:${revision}`);
+      }
+      setInboundReceipts(prev => prev.map(r => r.id === id ? reviewed : r));
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Could not review the receipt.' };
+    } finally { inboundBusy.current = false; }
+  };
+
   const addInboundToDailyLog = useCallback(
-    (receiving: Omit<DailyInboundReceivingItem, 'id' | 'verifiedAt'> | Array<Omit<DailyInboundReceivingItem, 'id' | 'verifiedAt'>>) => {
+    async (receiving: Omit<DailyInboundReceivingItem, 'id' | 'verifiedAt'> | Array<Omit<DailyInboundReceivingItem, 'id' | 'verifiedAt'>>) => {
+      if (isFirebaseConfigured) return saveCloudShift('shift.inbound', { items: Array.isArray(receiving) ? receiving : [receiving] });
       const branchId = currentUser?.branchId || 'b-legazpi';
-      const today = new Date().toISOString().split('T')[0];
+      const today = businessDate();
       const itemsList = Array.isArray(receiving) ? receiving : [receiving];
       const now = new Date().toISOString();
 
@@ -5350,7 +5454,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             l.id === existing!.id
               ? {
                   ...l,
-                  inboundReceiving: [...l.inboundReceiving, ...newEntries],
+                  inboundReceiving: [...l.inboundReceiving.filter(item => !newEntries.some(entry => entry.manifestNumber === item.manifestNumber)), ...newEntries],
                   updatedAt: now,
                 }
               : l
@@ -5381,9 +5485,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const removeInboundFromDailyLog = useCallback(
-    (inboundId: string) => {
+    async (inboundId: string) => {
+      if (isFirebaseConfigured) return saveCloudShift('shift.inbound.removeItem', { entryId: inboundId });
       const branchId = currentUser?.branchId || 'b-legazpi';
-      const today = new Date().toISOString().split('T')[0];
+      const today = businessDate();
 
       setDailyShiftLogs((prev) => {
         const existing = prev.find((l) => l.branchId === branchId && l.date === today);
@@ -5407,9 +5512,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const removeInboundManifestFromDailyLog = useCallback(
-    (manifestNumber: string) => {
+    async (manifestNumber: string) => {
+      if (isFirebaseConfigured) return saveCloudShift('shift.inbound.remove', { manifestNumber });
       const branchId = currentUser?.branchId || 'b-legazpi';
-      const today = new Date().toISOString().split('T')[0];
+      const today = businessDate();
 
       setDailyShiftLogs((prev) => {
         const existing = prev.find((l) => l.branchId === branchId && l.date === today);
@@ -5461,7 +5567,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const updateProductPricing = useCallback(
-    (productId: string, price: number, wholesalePrice?: number) => {
+    async (productId: string, price: number, wholesalePrice?: number) => {
+      if (!isSuperAdmin(currentUser)) return { success: false, error: 'Only HQ can update prices.' };
+      if (!Number.isFinite(price) || price < 0 || (wholesalePrice !== undefined && (!Number.isFinite(wholesalePrice) || wholesalePrice < 0))) return { success: false, error: 'Prices must be valid nonnegative amounts.' };
+      if (isFirebaseConfigured) {
+        try {
+          const result = await commitTransaction('product.price', { productId, price, wholesalePrice });
+          setProducts(prev => prev.map(product => product.id === productId ? result.product! : product));
+          return { success: true };
+        } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Price update was not saved.' }; }
+      }
       setProducts((prev) =>
         prev.map((p) =>
           p.id === productId
@@ -5475,11 +5590,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       return { success: true };
     },
-    []
+    [currentUser]
   );
 
   const updateUserRole = useCallback(
     (userId: string, newRole: Role | string, branchId?: string) => {
+      if (!isSuperAdmin(currentUser)) return { success: false, error: 'Only HQ can manage user access.' };
+      if (isFirebaseConfigured) return { success: false, error: 'Use Account Management to save access changes through the authenticated service.' };
       setUsers((prev) =>
         prev.map((u) => {
           if (u.id === userId) {
@@ -5513,6 +5630,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addNewUser = useCallback(
     (user: Omit<UserModel, 'id'>) => {
+      if (!isSuperAdmin(currentUser)) return { success: false, error: 'Only HQ can manage user access.' };
+      if (isFirebaseConfigured) return { success: false, error: 'Use Account Management to save access changes through the authenticated service.' };
       const newUser: UserModel = {
         id: `u-${Date.now()}`,
         ...user,
@@ -5526,6 +5645,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <DataContext.Provider
       value={{
+        inboundReceipts,
+        submitInboundReceipt,
+        reviewInboundReceipt,
         users,
         branches,
         products,

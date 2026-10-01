@@ -1,3 +1,4 @@
+import { businessDate } from '../../../functions/src/transactionModel';
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import {
@@ -26,6 +27,7 @@ import {
 import { DailyInboundReceivingItem, DailyLogStatus } from '../../types';
 import { JT_EXPRESS_TRACKING_URL } from '../../services/jtExpress';
 import { formatBytes, validateUploadedFile } from '../../utils/fileValidation';
+import { InboundApprovalQueue } from './InboundApprovalQueue';
 
 interface ManifestLineItem {
   id: string;
@@ -49,6 +51,8 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
     dailyShiftLogs,
     deliveries,
     orders,
+    inboundReceipts,
+    submitInboundReceipt,
     addInboundToDailyLog,
     removeInboundFromDailyLog,
     removeInboundManifestFromDailyLog,
@@ -57,7 +61,8 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
 
   const isDark = themeMode === 'dark';
   const branchId = currentUser?.branchId || currentBranch?.id || 'b-legazpi';
-  const today = new Date().toISOString().split('T')[0];
+  const today = businessDate();
+  const [revisingReceiptId, setRevisingReceiptId] = useState<string | null>(null);
 
   const todayLog = useMemo(() => {
     return (dailyShiftLogs || []).find((l) => l.branchId === branchId && l.date === today);
@@ -67,7 +72,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
   const isLocked = currentStatus === DailyLogStatus.VALIDATED_AND_LOCKED;
   const isPending = currentStatus === DailyLogStatus.PENDING_VALIDATION;
   const isReturned = currentStatus === DailyLogStatus.RETURNED_FOR_REVISION;
-  const isEditable = !isLocked && !isPending;
+  const isEditable = (!isLocked && !isPending) || Boolean(revisingReceiptId);
 
   // Filter ONLY gourmet marshmallow flavors (strictly remove flavoring extract 'f*' and packaging 'pkg*')
   const marshmallowProducts = useMemo(() => {
@@ -75,11 +80,13 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
   }, [products]);
 
   // Manifest Header State
-  const [manifestNumber, setManifestNumber] = useState<string>('MNF-LEG-2026-0902');
+  const [manifestNumber, setManifestNumber] = useState<string>('');
   const [supplierOrSource, setSupplierOrSource] = useState<string>('Legazpi Central Commissary Hub');
   const [courierNotes, setCourierNotes] = useState<string>('Courier J&T Express • Thermal tamper seal intact');
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
   const [showConfirmVerifyModal, setShowConfirmVerifyModal] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [selectedDeliveryId, setSelectedDeliveryId] = useState<string | undefined>();
   const [showRestartDraftModal, setShowRestartDraftModal] = useState<boolean>(false);
   const [manifestToDelete, setManifestToDelete] = useState<{ manifestNumber: string; items: DailyInboundReceivingItem[] } | null>(null);
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string; manifestNumber: string } | null>(null);
@@ -87,33 +94,15 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
   // Multi-Item Manifest Line Items State
   const [manifestLines, setManifestLines] = useState<ManifestLineItem[]>(() => {
     const p1 = marshmallowProducts[0]?.id || 'p1';
-    const p2 = marshmallowProducts[1]?.id || 'p2';
-    const p3 = marshmallowProducts[2]?.id || 'p3';
 
     return [
       {
         id: 'line-1',
         productId: p1,
-        expectedUnits: 25,
-        receivedUnits: 25,
+        expectedUnits: 0,
+        receivedUnits: 0,
         condition: 'good',
         notes: '',
-      },
-      {
-        id: 'line-2',
-        productId: p2,
-        expectedUnits: 20,
-        receivedUnits: 20,
-        condition: 'good',
-        notes: '',
-      },
-      {
-        id: 'line-3',
-        productId: p3,
-        expectedUnits: 20,
-        receivedUnits: 18,
-        condition: 'shortage',
-        notes: '2 packs missing from tote box #3',
       },
     ];
   });
@@ -122,21 +111,17 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
   const incomingShipments = useMemo(() => {
     return (deliveries || []).filter((d) => {
       const ord = (orders || []).find((o) => o.id === d.orderId);
-      const isForThisBranch =
-        ord?.branchId === branchId ||
-        ord?.branchName?.toLowerCase() === currentBranch?.name?.toLowerCase() ||
-        d.destinationAddress?.toLowerCase().includes(currentBranch?.name?.toLowerCase() || '') ||
-        d.destinationAddress?.toLowerCase().includes(branchId.replace('b-', '').toLowerCase());
-      return isForThisBranch && d.status !== 'delivered';
+      const isForThisBranch = d.branchId === branchId || ord?.branchId === branchId;
+      return isForThisBranch && d.status !== 'delivered' && d.status !== 'canceled' && !inboundReceipts.some(r => r.deliveryId === d.id && r.status !== 'returned');
     });
-  }, [deliveries, orders, branchId, currentBranch]);
+  }, [deliveries, orders, branchId, currentBranch, inboundReceipts]);
 
   // Handler to load dispatched shipment into the manifest form
   const handleSelectIncomingShipment = (delivery: any) => {
+    setRevisingReceiptId(null);
+    setSelectedDeliveryId(delivery.id);
     const trackingNo = delivery.waybillNumber || delivery.trackingNumber;
-    if (trackingNo) {
-      setManifestNumber(trackingNo);
-    }
+    setManifestNumber(trackingNo || delivery.id);
     const isJT =
       delivery.dispatchMethod === 'jt_express' ||
       (delivery.courierName && delivery.courierName.toLowerCase().includes('j&t'));
@@ -155,17 +140,12 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
 
     if (itemsToLoad && itemsToLoad.length > 0) {
       const newLines: ManifestLineItem[] = itemsToLoad.map((it: any, idx: number) => {
-        const matchedProd =
-          marshmallowProducts.find(
-            (p) =>
-              p.name === it.productName ||
-              p.flavor === it.productName ||
-              p.id === it.productId
-          ) || marshmallowProducts[idx % marshmallowProducts.length] || marshmallowProducts[0];
+        const matchedProd = marshmallowProducts.find(p => p.id === it.productId)
+          || marshmallowProducts.find(p => p.flavor === it.productName);
 
         return {
           id: `line-${Date.now()}-${idx}`,
-          productId: matchedProd.id,
+          productId: matchedProd?.id || '',
           expectedUnits: it.quantity,
           receivedUnits: it.quantity,
           condition: 'good',
@@ -324,47 +304,56 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
   };
 
   // Record all lines in this manifest to shift summary upon staff confirmation
-  const handleConfirmApplyToSummary = () => {
-    if (!isEditable) return;
+  const handleConfirmApplyToSummary = async () => {
+    if (!isEditable || submitting) return;
+    if (manifestLines.some(line => !products.some(p => p.id === line.productId))) {
+      setFeedback({ text: 'Select a valid product for every line before requesting approval.', type: 'error' });
+      return;
+    }
+    setSubmitting(true);
 
     // Build the payload for addInboundToDailyLog (supports array of items)
     const itemsPayload = manifestLines.map((line) => {
-      const prod = products.find((p) => p.id === line.productId) || marshmallowProducts[0];
+      const prod = products.find((p) => p.id === line.productId)!;
       const combinedNotes = [line.notes.trim(), courierNotes.trim()].filter(Boolean).join(' • ');
 
       return {
+        deliveryId: selectedDeliveryId,
         manifestNumber: manifestNumber.trim(),
         supplierOrSource: supplierOrSource.trim() || 'Legazpi Central Commissary Hub',
         productId: prod.id,
         productName: `${prod.flavor} (${prod.name})`,
-        expectedUnits: Math.max(0, Number(line.expectedUnits) || 0),
-        receivedUnits: Math.max(0, Number(line.receivedUnits) || 0),
+        expectedUnits: Number(line.expectedUnits),
+        receivedUnits: Number(line.receivedUnits),
         condition: line.condition,
         notes: combinedNotes,
         damageProof: line.damageProof,
       };
     });
 
-    const res = addInboundToDailyLog(itemsPayload);
-    setShowConfirmVerifyModal(false);
+    const res = await submitInboundReceipt({ manifestNumber: manifestNumber.trim(), supplierOrSource: supplierOrSource.trim() || 'Legazpi Central Commissary Hub', deliveryId: selectedDeliveryId, items: itemsPayload.map(({ damageProof: _proof, ...item }) => item) });
+    setSubmitting(false);
 
     if (res.success) {
+      const summarySave = !isLocked && !isPending ? await addInboundToDailyLog(itemsPayload) : { success: true };
+      setShowConfirmVerifyModal(false);
+      setSelectedDeliveryId(undefined);
+      setRevisingReceiptId(null);
       setFeedback({
-        text: `Successfully verified and recorded manifest ${manifestNumber} (${itemsPayload.length} flavors, ${manifestSummary.totalReceived} packs received) to Shift Summary.`,
+        text: summarySave.success ? `Manifest ${manifestNumber} sent for branch-manager approval. Accepted packs will be added to Current Stock once approved.` : `The receiving request was saved, but its shift summary was not. ${summarySave.error || 'Refresh before retrying the summary.'}`,
         type: 'success',
       });
 
       // Prepare a new manifest number and reset lines for subsequent deliveries
-      const nextSeq = Math.floor(1000 + Math.random() * 9000);
-      setManifestNumber(`MNF-LEG-2026-${nextSeq}`);
+      setManifestNumber('');
       setCourierNotes('Thermal tamper seal intact');
       const p1 = marshmallowProducts[0]?.id || 'p1';
       setManifestLines([
         {
           id: `line-${Date.now()}`,
           productId: p1,
-          expectedUnits: 20,
-          receivedUnits: 20,
+          expectedUnits: 0,
+          receivedUnits: 0,
           condition: 'good',
           notes: '',
         },
@@ -378,8 +367,9 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
 
   // Delete draft and restart transaction from scratch
   const handleConfirmRestartDraft = () => {
-    const nextSeq = Math.floor(1000 + Math.random() * 9000);
-    setManifestNumber(`MNF-LEG-2026-${nextSeq}`);
+    setRevisingReceiptId(null);
+    setSelectedDeliveryId(undefined);
+    setManifestNumber('');
     setSupplierOrSource('Legazpi Central Commissary Hub');
     setCourierNotes('Courier J&T Express • Thermal tamper seal intact');
     const p1 = marshmallowProducts[0]?.id || 'p1';
@@ -387,8 +377,8 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
       {
         id: `line-${Date.now()}`,
         productId: p1,
-        expectedUnits: 20,
-        receivedUnits: 20,
+        expectedUnits: 0,
+        receivedUnits: 0,
         condition: 'good',
         notes: '',
       },
@@ -402,8 +392,9 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
   };
 
   // Delete verified manifest from shift log to restart
-  const handleConfirmDeleteManifest = (mnfNum: string) => {
-    removeInboundManifestFromDailyLog(mnfNum);
+  const handleConfirmDeleteManifest = async (mnfNum: string) => {
+    const result = await removeInboundManifestFromDailyLog(mnfNum);
+    if (!result.success) { setFeedback({ text: result.error || 'The entry could not be removed.', type: 'error' }); return; }
     setManifestToDelete(null);
     setFeedback({
       text: `Deleted manifest ${mnfNum} from verified inbound records.`,
@@ -413,8 +404,9 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
   };
 
   // Delete verified manifest and reload back into the draft form to restart editing
-  const handleDeleteAndRestartInForm = (mnfNum: string, items: DailyInboundReceivingItem[]) => {
-    removeInboundManifestFromDailyLog(mnfNum);
+  const handleDeleteAndRestartInForm = async (mnfNum: string, items: DailyInboundReceivingItem[]) => {
+    const result = await removeInboundManifestFromDailyLog(mnfNum);
+    if (!result.success) { setFeedback({ text: result.error || 'The entry could not be removed.', type: 'error' }); return; }
     setManifestNumber(mnfNum);
     if (items[0]?.supplierOrSource) {
       setSupplierOrSource(items[0].supplierOrSource);
@@ -479,6 +471,14 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
 
   return (
     <div id="staff-inbound-receiving-view" className="space-y-6">
+      <InboundApprovalQueue onRevise={receipt => {
+        setRevisingReceiptId(receipt.id);
+        setSelectedDeliveryId(receipt.deliveryId);
+        setManifestNumber(receipt.manifestNumber);
+        setSupplierOrSource(receipt.supplierOrSource);
+        setManifestLines(receipt.items.map((item, index) => ({ ...item, id: `revision-${index}`, notes: item.notes || '' })));
+        setFeedback({ text: 'Review the returned quantities below and request approval again using the same manifest number.', type: 'info' });
+      }} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -762,6 +762,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                   type="text"
                   value={manifestNumber}
                   disabled={!isEditable}
+                  readOnly={Boolean(selectedDeliveryId)}
                   onChange={(e) => setManifestNumber(e.target.value)}
                   placeholder="e.g. MNF-LEG-2026-0902"
                   className="w-full px-3 py-2 text-xs sm:text-sm font-mono font-bold rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-[#121212] text-neutral-900 dark:text-white focus:ring-2 focus:ring-[#80C7F2]"
@@ -1036,7 +1037,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                 }`}
             >
               <PackageCheck className="w-4 h-4" />
-              <span>Verify & Record Entire Manifest ({manifestSummary.totalReceived} Packs)</span>
+              <span>Request Receiving Approval ({manifestSummary.totalReceived} Packs)</span>
             </button>
           </form>
         </div>
@@ -1047,7 +1048,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
             <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 font-bold text-xs sm:text-sm text-neutral-900 dark:text-white flex items-center justify-between">
               <span className="flex items-center space-x-2">
                 <FileCheck className="w-4 h-4 text-emerald-500" />
-                <span>Verified Inbound Deliveries ({verifiedReceivings.length})</span>
+                <span>Shift receiving records ({verifiedReceivings.length})</span>
               </span>
               <span className="text-xs font-mono text-neutral-400">
                 {Object.keys(groupedManifests).length} manifest(s)
@@ -1082,7 +1083,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                             {manifestTotalRecv} / {manifestTotalExp} packs
                           </span>
-                          {isEditable && (
+                          {isEditable && !inboundReceipts.some(r => r.branchId === branchId && r.manifestNumber === mnfNumber) && (
                             <button
                               type="button"
                               id={`delete-manifest-${mnfNumber}`}
@@ -1136,7 +1137,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                               >
                                 {it.condition.toUpperCase()}
                               </span>
-                              {isEditable && (
+                              {isEditable && !inboundReceipts.some(r => r.branchId === branchId && r.manifestNumber === mnfNumber) && (
                                 <button
                                   type="button"
                                   onClick={() => setItemToDelete({ id: it.id, name: it.productName, manifestNumber: mnfNumber })}
@@ -1197,7 +1198,7 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
                 </div>
                 <div>
                   <h3 className="text-base sm:text-lg font-black tracking-tight">
-                    Verify & Apply Manifest to Shift Summary?
+                    Send to Branch Manager for Approval?
                   </h3>
                   <p className="text-xs text-neutral-500 dark:text-neutral-400">
                     Waybill #{manifestNumber} • {supplierOrSource}
@@ -1301,11 +1302,12 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
             <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 flex items-start space-x-2.5 text-xs text-amber-900 dark:text-amber-300">
               <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
               <div>
-                <span className="font-bold">Inventory Ledger Synchronization:</span> Recording this manifest applies these inbound counts to your shift records and aggregates them into your <span className="font-bold">Shift Summary</span> for final branch manager validation.
+                <span className="font-bold">Approval required:</span> Your branch manager will review this receipt in Log Validation. Accepted packs will then be added to Current Stock. Damaged lines add zero available packs; record undamaged packs on a separate line.
               </div>
             </div>
 
             {/* Actions */}
+            {feedback?.type === 'error' && <p role="alert" className="text-sm text-red-600">{feedback.text}</p>}
             <div className="flex items-center justify-end space-x-3 pt-2">
               <button
                 type="button"
@@ -1317,11 +1319,12 @@ export const StaffInboundReceiving: React.FC<StaffInboundReceivingProps> = ({ on
               <button
                 type="button"
                 id="modal-confirm-apply-manifest-btn"
+                disabled={submitting}
                 onClick={handleConfirmApplyToSummary}
                 className="flex items-center space-x-1.5 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm cursor-pointer active:scale-98"
               >
                 <PackageCheck className="w-4 h-4" />
-                <span>Yes, Apply to Shift Summary</span>
+                <span>{submitting ? 'Submitting…' : 'Request Approval'}</span>
               </button>
             </div>
           </div>
