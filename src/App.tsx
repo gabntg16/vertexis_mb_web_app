@@ -17,7 +17,6 @@ const AdminProduction = lazyNamed(() => import('./components/admin/AdminProducti
 const AdminBranches = lazyNamed(() => import('./components/admin/AdminBranches'), 'AdminBranches');
 const AdminLogistics = lazyNamed(() => import('./components/admin/AdminLogistics'), 'AdminLogistics');
 const AdminSalesHistory = lazyNamed(() => import('./components/admin/AdminSalesHistory'), 'AdminSalesHistory');
-const AdminCalendar = lazyNamed(() => import('./components/admin/AdminCalendar'), 'AdminCalendar');
 const AdminAnnouncements = lazyNamed(() => import('./components/admin/AdminAnnouncements'), 'AdminAnnouncements');
 const AdminProductPricing = lazyNamed(() => import('./components/admin/AdminProductPricing'), 'AdminProductPricing');
 const ManagerLogValidation = lazyNamed(() => import('./components/branch/ManagerLogValidation'), 'ManagerLogValidation');
@@ -33,7 +32,7 @@ const StaffShiftSummary = lazyNamed(() => import('./components/branch/StaffShift
 const SettingsPage = lazyNamed(() => import('./components/settings/SettingsPage'), 'SettingsPage');
 
 const MainShell: React.FC = () => {
-  const { currentUser, themeMode, syncState } = useData();
+  const { currentUser, themeMode } = useData();
   const [activeTab, setActiveTab] = useState<string>('physical_counts');
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
 
@@ -69,7 +68,6 @@ const MainShell: React.FC = () => {
           'branches',
           'logistics',
           'sales',
-          'calendar',
           'announcements',
           'account_settings',
           'privacy_settings',
@@ -121,12 +119,6 @@ const MainShell: React.FC = () => {
 
         {/* View Content Enforcing 3-Tier RBAC Route Protection */}
         <main id="main-content" tabIndex={-1} className="mallow-main flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-7 animate-in fade-in duration-300">
-          {syncState.error && (
-            <div role="alert" className="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-800 dark:bg-rose-950 dark:text-rose-200">
-              <p className="font-semibold">Cloud sync needs attention</p>
-              <p className="mt-1 break-words">{syncState.error}</p>
-            </div>
-          )}
           <Suspense fallback={<div role="status" className="mallow-panel rounded-2xl p-8 text-sm text-neutral-500">Loading workspace…</div>}>
           {/* TIER 1: BRANCH_STAFF (Frontline Ground Operations) */}
           {isStaff && (
@@ -208,7 +200,6 @@ const MainShell: React.FC = () => {
               {activeTab === 'branches' && <AdminBranches />}
               {activeTab === 'logistics' && <AdminLogistics />}
               {activeTab === 'sales' && <AdminSalesHistory />}
-              {activeTab === 'calendar' && <AdminCalendar />}
               {activeTab === 'announcements' && <AdminAnnouncements />}
               {['account_settings', 'privacy_settings', 'legal_terms'].includes(activeTab) && (
                 <SettingsPage section={activeTab as 'account_settings' | 'privacy_settings' | 'legal_terms'} onNavigateTab={setActiveTab} />
@@ -228,7 +219,6 @@ const MainShell: React.FC = () => {
                 'branches',
                 'logistics',
                 'sales',
-                'calendar',
                 'announcements',
                 'account_settings',
                 'privacy_settings',

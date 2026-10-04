@@ -124,7 +124,6 @@ export const AUDIENCE_OPTIONS: { key: NotificationAudience; label: string; descr
   { key: 'admin', label: 'HQ Admin & Executives', description: 'Central Commissary management & leadership' },
   { key: 'branch_manager', label: 'Branch Managers', description: 'Store branch managers and franchise operators' },
   { key: 'cashier', label: 'Cashiers & Store Crew', description: 'Frontline retail cashier and sales team' },
-  { key: 'commissary_staff', label: 'Commissary Staff', description: 'Kitchen cooks, inventory specialists & packers' },
 ];
 
 /**

@@ -27,7 +27,6 @@ import {
   InventoryItem,
   Sale,
   Announcement,
-  CalendarEvent,
   ProductionBatch,
   BranchDocument,
   BranchApplication,
@@ -156,7 +155,7 @@ export class FirestoreSyncService {
     onInventory?: (inventory: InventoryItem[]) => void;
     onSales?: (sales: Sale[]) => void;
     onAnnouncements?: (announcements: Announcement[]) => void;
-    onEvents?: (events: CalendarEvent[]) => void;
+    onEvents?: (events: any[]) => void;
     onProductionBatches?: (batches: ProductionBatch[]) => void;
     onBranchApplications?: (applications: BranchApplication[]) => void;
     onBranchDocuments?: (documents: BranchDocument[]) => void;
@@ -182,7 +181,6 @@ export class FirestoreSyncService {
       const ref = collection(db, name);
       if (scope.role === 'admin' || GLOBAL_COLLECTIONS.has(name)) return ref;
       if (name === 'announcements') return query(ref, or(where('scope', 'in', ['nationwide', 'global']), where('targetBranchId', '==', scope.branchId)));
-      if (name === 'events') return query(ref, where('branchId', 'in', ['ALL', scope.branchId]));
       // Rules authorize the document path, not the optional data.id field.
       if (name === 'branches') return query(ref, where(documentId(), '==', scope.branchId));
       if (BRANCH_SCOPED_COLLECTIONS.has(name)) return query(ref, where('branchId', '==', scope.branchId));
@@ -218,7 +216,6 @@ export class FirestoreSyncService {
     subscribe('inventory', callbacks.onInventory);
     subscribe('sales', callbacks.onSales);
     subscribe('announcements', callbacks.onAnnouncements);
-    subscribe('events', callbacks.onEvents);
     subscribe('branch_documents', callbacks.onBranchDocuments);
     subscribe('branch_accounts', callbacks.onBranchAccounts);
     subscribe('branch_status_history', callbacks.onBranchStatusHistory);
@@ -340,7 +337,7 @@ export class FirestoreSyncService {
     inventory: InventoryItem[];
     sales: Sale[];
     announcements: Announcement[];
-    events: CalendarEvent[];
+    events?: any[];
     productionBatches?: ProductionBatch[];
     branchApplications?: BranchApplication[];
     branchDocuments?: BranchDocument[];
@@ -361,12 +358,14 @@ export class FirestoreSyncService {
       console.log('[Firestore] Seeding initial dataset into Firestore...');
       this.updateState({ status: 'syncing' });
 
-      // Batch 1: Branches & Products & Users & Announcements & Events & Batches
+      // Batch 1: Branches & Products & Users & Announcements & Batches
       const batch1 = writeBatch(db);
       initialData.branches.forEach((b) => batch1.set(doc(db, 'branches', b.id), sanitizeForFirestore(b)));
       initialData.products.forEach((p) => batch1.set(doc(db, 'products', p.id), sanitizeForFirestore(p)));
       initialData.announcements.forEach((a) => batch1.set(doc(db, 'announcements', a.id), sanitizeForFirestore(a)));
-      initialData.events.forEach((e) => batch1.set(doc(db, 'events', e.id), sanitizeForFirestore(e)));
+      if (initialData.events) {
+        initialData.events.forEach((e) => batch1.set(doc(db, 'events', e.id), sanitizeForFirestore(e)));
+      }
       if (initialData.productionBatches) {
         initialData.productionBatches.forEach((pb) => batch1.set(doc(db, 'production_batches', pb.id), sanitizeForFirestore(pb)));
       }

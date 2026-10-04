@@ -85,9 +85,10 @@ export const AdminAnnouncements: React.FC = () => {
     { key: 'inventory', label: 'Inventory & Stock Alert', icon: <Boxes className="w-4 h-4" /> },
   ];
 
-  // The composer targets HQ and branch operations only. Existing cashier-targeted
-  // broadcasts remain supported in the data model and history filters.
-  const broadcastAudienceOptions = AUDIENCE_OPTIONS.filter((aud) => aud.key !== 'cashier');
+  // The composer targets HQ and branch manager operations.
+  const broadcastAudienceOptions = AUDIENCE_OPTIONS.filter(
+    (aud) => aud.key !== 'cashier' && (aud.key as string) !== 'commissary_staff'
+  );
 
   // Audience toggle handler
   const handleToggleAudience = (aud: NotificationAudience) => {
@@ -339,9 +340,9 @@ export const AdminAnnouncements: React.FC = () => {
             isDark ? 'bg-[#161616] border-neutral-800' : 'bg-white border-neutral-200/80 shadow-xs'
           }`}
         >
-          <p className="text-[11px] font-bold text-purple-500 uppercase tracking-wider">Directives & POS</p>
+          <p className="text-[11px] font-bold text-purple-500 uppercase tracking-wider">Directives</p>
           <p className="text-xl font-black mt-1 text-purple-600 dark:text-purple-400">
-            {announcements.filter((a) => a.kind === 'general' || a.kind === 'pos' || !a.kind).length}
+            {announcements.filter((a) => a.kind === 'general' || !a.kind).length}
           </p>
         </div>
       </div>
@@ -392,7 +393,6 @@ export const AdminAnnouncements: React.FC = () => {
               <option value="logistics">🚚 Logistics & Dispatch</option>
               <option value="production">🏭 Kitchen Production</option>
               <option value="inventory">⚠️ Inventory & Stock</option>
-              <option value="pos">🧾 Retail POS & BIR</option>
               <option value="general">📢 General Directive</option>
             </select>
           </div>
@@ -434,7 +434,6 @@ export const AdminAnnouncements: React.FC = () => {
               <option value="admin">👑 HQ Admin Only</option>
               <option value="branch_manager">🏪 Branch Managers</option>
               <option value="cashier">🧾 Cashiers & Crew</option>
-              <option value="commissary_staff">👨‍🍳 Commissary Kitchen</option>
             </select>
           </div>
         </div>

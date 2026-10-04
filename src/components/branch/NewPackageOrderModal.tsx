@@ -17,9 +17,9 @@ export interface PackageTier {
 }
 
 export const PACKAGE_TIERS: PackageTier[] = [
-  { id: 'silver', ...PACKAGE_PRICES.silver, rangeLabel: '35 - 54 packs' },
-  { id: 'gold', ...PACKAGE_PRICES.gold, rangeLabel: '55 - 69 packs' },
-  { id: 'platinum', ...PACKAGE_PRICES.platinum, rangeLabel: '70+ packs' },
+  { id: 'silver', ...PACKAGE_PRICES.silver, maxCap: 35, rangeLabel: '35 packs' },
+  { id: 'gold', ...PACKAGE_PRICES.gold, maxCap: 55, rangeLabel: '55 packs' },
+  { id: 'platinum', ...PACKAGE_PRICES.platinum, maxCap: 70, rangeLabel: '70 packs' },
 ];
 
 /**
@@ -92,7 +92,7 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
   const totalPacks = Object.values(quantities).reduce((sum, q) => sum + (q || 0), 0);
   const currentTier = PACKAGE_TIERS.find((t) => t.id === selectedTierId) || PACKAGE_TIERS[1];
   const isBelowBase = totalPacks < currentTier.baseCapacity;
-  const isCapReached = totalPacks >= currentTier.maxCap;
+  const isCapReached = totalPacks >= currentTier.baseCapacity;
   const { totalPrice, isExceeded, excessPacks } = calculatePackagePrice(currentTier, totalPacks);
 
   // Intelligent upgrade optimization calculation
@@ -128,12 +128,12 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
 
   const handleQuantityChange = (productId: string, delta: number) => {
     const product = products.find((p) => p.id === productId);
-    if (delta > 0 && totalPacks >= currentTier.maxCap) {
+    if (delta > 0 && totalPacks + delta > currentTier.baseCapacity) {
       setExceedWarning({
         isOpen: true,
         tier: currentTier,
         attemptedTotal: totalPacks + delta,
-        maxCap: currentTier.maxCap,
+        maxCap: currentTier.baseCapacity,
         productFlavor: product?.flavor,
         reason: 'cap_reached',
       });
@@ -142,8 +142,11 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
 
     setQuantities((prev) => {
       const currentQty = prev[productId] || 0;
-      if (delta > 0 && totalPacks >= currentTier.maxCap) {
-        return prev;
+      if (delta > 0) {
+        if (totalPacks >= currentTier.baseCapacity) return prev;
+        const safeDelta = Math.min(delta, currentTier.baseCapacity - totalPacks);
+        if (safeDelta <= 0) return prev;
+        return { ...prev, [productId]: currentQty + safeDelta };
       }
       const nextQty = Math.max(0, currentQty + delta);
       return { ...prev, [productId]: nextQty };
@@ -155,7 +158,7 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
       .filter(([id]) => id !== productId)
       .reduce((sum, [, q]) => sum + (q || 0), 0);
 
-    const maxAvailableForThisItem = Math.max(0, currentTier.maxCap - otherPacksTotal);
+    const maxAvailableForThisItem = Math.max(0, currentTier.baseCapacity - otherPacksTotal);
     const product = products.find((p) => p.id === productId);
 
     if (rawVal === '') {
@@ -174,7 +177,7 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
         isOpen: true,
         tier: currentTier,
         attemptedTotal: otherPacksTotal + parsed,
-        maxCap: currentTier.maxCap,
+        maxCap: currentTier.baseCapacity,
         productFlavor: product?.flavor,
         reason: 'input_exceeded',
       });
@@ -187,17 +190,17 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
   const handleSelectTier = (tierId: 'silver' | 'gold' | 'platinum') => {
     const targetTier = PACKAGE_TIERS.find((t) => t.id === tierId) || PACKAGE_TIERS[1];
 
-    if (totalPacks > targetTier.maxCap) {
+    if (totalPacks > targetTier.baseCapacity) {
       setExceedWarning({
         isOpen: true,
         tier: currentTier,
         targetTier,
         attemptedTotal: totalPacks,
-        maxCap: targetTier.maxCap,
+        maxCap: targetTier.baseCapacity,
         reason: 'tier_switch_exceeded',
       });
 
-      let remainingAllowed = targetTier.maxCap;
+      let remainingAllowed = targetTier.baseCapacity;
       const adjusted: Record<string, number> = {};
       for (const [pId, qty] of Object.entries(quantities)) {
         if (remainingAllowed <= 0) {
@@ -216,7 +219,7 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
   };
 
   const handleAutoAdjustToMaxCap = (targetCap?: number) => {
-    const cap = targetCap || currentTier.maxCap;
+    const cap = targetCap || currentTier.baseCapacity;
     let remainingAllowed = cap;
     const adjusted: Record<string, number> = {};
     for (const [pId, qty] of Object.entries(quantities)) {
@@ -238,12 +241,12 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
     setSaveError('');
     if (totalPacks < currentTier.baseCapacity) return;
 
-    if (totalPacks > currentTier.maxCap) {
+    if (totalPacks > currentTier.baseCapacity) {
       setExceedWarning({
         isOpen: true,
         tier: currentTier,
         attemptedTotal: totalPacks,
-        maxCap: currentTier.maxCap,
+        maxCap: currentTier.baseCapacity,
         reason: 'cap_reached',
       });
       return;
@@ -383,7 +386,7 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
                   <input
                     type="number"
                     min="0"
-                    max={currentTier.maxCap}
+                    max={currentTier.baseCapacity}
                     value={currentQty === 0 ? '' : currentQty}
                     onChange={(e) => handleDirectQtyInput(prod.id, e.target.value)}
                     placeholder="0"
@@ -393,9 +396,12 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
                   <button
                     type="button"
                     onClick={() => handleQuantityChange(prod.id, 1)}
-                    disabled={isAddDisabled}
-                    className="w-7 h-7 rounded-lg text-slate-700 bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors font-bold"
-                    title={isAddDisabled ? 'Package capacity reached' : 'Increase quantity'}
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors font-bold ${
+                      isCapReached
+                        ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 border border-dashed border-amber-400 cursor-pointer'
+                        : 'text-slate-700 bg-slate-100 hover:bg-slate-200 cursor-pointer'
+                    }`}
+                    title={isCapReached ? `Maximum limit reached (${currentTier.baseCapacity} packs). Click to upgrade.` : 'Increase quantity'}
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -419,35 +425,39 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
 
           {/* Cap Limit or Exceed Alert Banner */}
           {isCapReached && (
-            <button
-              type="button"
-              onClick={() =>
-                setExceedWarning({
-                  isOpen: true,
-                  tier: currentTier,
-                  attemptedTotal: totalPacks,
-                  maxCap: currentTier.maxCap,
-                  reason: 'cap_reached',
-                })
-              }
-              className="w-full p-2.5 rounded-xl bg-red-600/90 hover:bg-red-600 text-white text-xs font-bold text-center leading-snug border border-red-500 flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer transition-colors"
-            >
-              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-              <span>{currentTier.name} Package maximum limit reached ({currentTier.maxCap} packs). Click to upgrade tier.</span>
-            </button>
-          )}
-
-          {isExceeded && !isCapReached && (
-            <div className="p-2.5 rounded-xl bg-[#34789d]/75 text-amber-200 text-xs font-semibold text-center leading-snug border border-[#2f6f92]">
-              Alert: {excessPacks} excess pack(s) added beyond base ({currentTier.baseCapacity} packs). Pro-rata rate applied.
+            <div className="p-3 rounded-xl bg-amber-500/95 text-white text-xs font-semibold leading-snug border border-amber-400 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center space-x-1.5">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>
+                  Maximum limit of <strong>{currentTier.baseCapacity} packs</strong> reached for {currentTier.name} Package. To order more packs, switch to a higher-tier package.
+                </span>
+              </div>
+              {selectedTierId === 'silver' && (
+                <button
+                  type="button"
+                  onClick={() => handleUpgradeToNextTier('gold')}
+                  className="px-3 py-1.5 rounded-lg bg-white text-amber-900 hover:bg-amber-50 text-xs font-bold shrink-0 cursor-pointer shadow-xs"
+                >
+                  ⚡ Switch to Gold (55 packs)
+                </button>
+              )}
+              {selectedTierId === 'gold' && (
+                <button
+                  type="button"
+                  onClick={() => handleUpgradeToNextTier('platinum')}
+                  className="px-3 py-1.5 rounded-lg bg-white text-amber-900 hover:bg-amber-50 text-xs font-bold shrink-0 cursor-pointer shadow-xs"
+                >
+                  ⚡ Switch to Platinum (70 packs)
+                </button>
+              )}
             </div>
           )}
 
           {/* Totals and Place Order button */}
           <div className="flex items-center justify-between">
             <div>
-              <p className={`text-xs font-bold ${isBelowBase ? 'text-amber-950' : isCapReached ? 'text-red-900' : 'text-slate-800'}`}>
-                Total Packs: {totalPacks} / {currentTier.maxCap < 900 ? `${currentTier.maxCap} max` : `${currentTier.baseCapacity}+`} (Min: {currentTier.baseCapacity})
+              <p className={`text-xs font-bold ${isBelowBase ? 'text-amber-950' : isCapReached ? 'text-emerald-950 font-extrabold' : 'text-slate-800'}`}>
+                Total Packs: {totalPacks} / {currentTier.baseCapacity} packs (Strict Limit: {currentTier.baseCapacity})
               </p>
               <p className="text-2xl font-black text-[#F37021] tracking-tight">
                 ₱{totalPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}

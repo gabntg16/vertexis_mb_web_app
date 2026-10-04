@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, Layers, ArrowUpRight, X, ShieldAlert, Sparkles, Check } from 'lucide-react';
+import { AlertTriangle, Layers, ArrowUpRight, X, ShieldAlert, Sparkles, Check, ArrowRight } from 'lucide-react';
 import { PackageTier, PACKAGE_TIERS } from './BranchOrders';
 
 export interface PackageExceedWarningDetails {
@@ -32,10 +32,12 @@ export const PackageCapacityWarningModal: React.FC<PackageCapacityWarningModalPr
   const isDark = themeMode === 'dark';
   const { tier, attemptedTotal, maxCap, productFlavor, reason, targetTier } = warning;
 
-  // Determine next available upgrade tier
+  // Determine available upgrade tiers
   let nextTier: PackageTier | null = null;
+  let highestTier: PackageTier | null = null;
   if (tier.id === 'silver') {
     nextTier = PACKAGE_TIERS.find((t) => t.id === 'gold') || null;
+    highestTier = PACKAGE_TIERS.find((t) => t.id === 'platinum') || null;
   } else if (tier.id === 'gold') {
     nextTier = PACKAGE_TIERS.find((t) => t.id === 'platinum') || null;
   }
@@ -79,78 +81,110 @@ export const PackageCapacityWarningModal: React.FC<PackageCapacityWarningModalPr
           </div>
           <div className="pr-6">
             <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25">
-              Capacity Limit Exceeded
+              Maximum Limit Reached
             </span>
             <h3 id="exceed-dialog-title" className="text-lg font-black tracking-tight mt-1 leading-snug text-neutral-900 dark:text-white">
-              Requisition Limit Warning
+              Package Limit Reached
             </h3>
           </div>
         </div>
 
-        {/* Contextual Warning Message */}
+        {/* Action Prevented & Limit Explanation */}
         <div className="text-xs text-neutral-600 dark:text-neutral-300 leading-relaxed mb-4 space-y-1.5">
           {reason === 'cap_reached' && (
             <p>
-              You have reached the maximum allowable limit of <strong className="text-neutral-900 dark:text-white font-bold">{maxCap} packs</strong> for the <strong className="text-[#F37021] font-bold">{tier.name} Package</strong>.
-              You cannot add more packs to this order unless you upgrade to a larger package tier.
+              The action was prevented because you have reached the strict maximum base capacity limit of{' '}
+              <strong className="text-neutral-900 dark:text-white font-bold">{tier.baseCapacity} packs</strong> for the{' '}
+              <strong className="text-[#F37021] font-bold">{tier.name} Package</strong>.
             </p>
           )}
 
           {reason === 'input_exceeded' && (
             <p>
-              The quantity entered for <strong className="text-neutral-900 dark:text-white font-bold">{productFlavor || 'this flavor'}</strong> would push your total requisition to <strong className="text-red-500 font-bold">{attemptedTotal} packs</strong>, exceeding the <strong className="text-[#F37021] font-bold">{tier.name} Package</strong> maximum cap of <strong className="text-neutral-900 dark:text-white font-bold">{maxCap} packs</strong>.
+              The entered quantity for <strong className="text-neutral-900 dark:text-white font-bold">{productFlavor || 'this flavor'}</strong> was prevented from exceeding the strict base limit of{' '}
+              <strong className="text-neutral-900 dark:text-white font-bold">{tier.baseCapacity} packs</strong> for the{' '}
+              <strong className="text-[#F37021] font-bold">{tier.name} Package</strong> (attempted {attemptedTotal} packs).
             </p>
           )}
 
           {reason === 'tier_switch_exceeded' && (
             <p>
-              Your current order contains <strong className="text-red-500 font-bold">{attemptedTotal} packs</strong>, which exceeds the <strong className="text-[#F37021] font-bold">{targetTier?.name || 'selected'} Package</strong> maximum cap of <strong className="text-neutral-900 dark:text-white font-bold">{maxCap} packs</strong>.
+              Your current order contains <strong className="text-red-500 font-bold">{attemptedTotal} packs</strong>, which exceeds the{' '}
+              <strong className="text-[#F37021] font-bold">{targetTier?.name || 'selected'} Package</strong> strict base limit of{' '}
+              <strong className="text-neutral-900 dark:text-white font-bold">{targetTier?.baseCapacity || maxCap} packs</strong>.
             </p>
           )}
         </div>
 
+        {/* Explicit Recommendation Card */}
+        <div className="mb-4 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-neutral-900 dark:text-neutral-100">
+          <div className="flex items-center space-x-2 mb-1.5">
+            <Sparkles className="w-4 h-4 text-[#F37021]" />
+            <span className="text-xs font-black text-[#d95d12] dark:text-amber-300 uppercase tracking-wide">
+              Recommendation to Order More Packs
+            </span>
+          </div>
+          <p className="text-xs text-neutral-700 dark:text-neutral-300 leading-relaxed">
+            {nextTier ? (
+              <>
+                If you wish to order more packs, we explicitly recommend switching to a higher-tier package:{' '}
+                <strong className="font-bold text-neutral-900 dark:text-white">
+                  {nextTier.name} Package ({nextTier.baseCapacity} packs)
+                </strong>
+                {highestTier && highestTier.id !== nextTier.id && (
+                  <>
+                    {' '}or{' '}
+                    <strong className="font-bold text-neutral-900 dark:text-white">
+                      {highestTier.name} Package ({highestTier.baseCapacity} packs)
+                    </strong>
+                  </>
+                )}
+                . Switching will preserve your selected flavors and unlock additional pack capacity.
+              </>
+            ) : (
+              <>
+                You have reached the maximum capacity of our highest tier (<strong className="font-bold text-neutral-900 dark:text-white">{tier.name} Package, {tier.baseCapacity} packs</strong>). If you require larger bulk commissary quantities, please submit a separate requisition or contact commissary dispatch.
+              </>
+            )}
+          </p>
+        </div>
+
         {/* Breakdown Metric Card */}
-        <div className={`p-3.5 rounded-2xl border mb-5 space-y-2 text-xs ${
+        <div className={`p-3 rounded-2xl border mb-4 space-y-1.5 text-xs ${
           isDark ? 'bg-neutral-850 border-neutral-800' : 'bg-neutral-50 border-neutral-200'
         }`}>
-          <div className="flex items-center justify-between pb-2 border-b border-neutral-200 dark:border-neutral-800">
+          <div className="flex items-center justify-between pb-1.5 border-b border-neutral-200 dark:border-neutral-800">
             <span className="text-neutral-500 flex items-center space-x-1.5">
               <Layers className="w-3.5 h-3.5 text-neutral-400" />
-              <span>Active Package Tier:</span>
+              <span>Current Package:</span>
             </span>
             <span className="font-bold text-neutral-900 dark:text-white">
-              {tier.name} Package ({tier.rangeLabel})
+              {tier.name} Package ({tier.baseCapacity} packs)
             </span>
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="text-neutral-500">Tier Strict Maximum Cap:</span>
+            <span className="text-neutral-500">Strict Base Capacity Limit:</span>
             <span className="font-mono font-bold text-neutral-800 dark:text-neutral-200">
-              {maxCap} packs
+              {tier.baseCapacity} packs
             </span>
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="text-neutral-500">Attempted Requisition:</span>
+            <span className="text-neutral-500">Attempted Total:</span>
             <span className="font-mono font-bold text-red-500">
               {attemptedTotal} packs
             </span>
           </div>
 
-          <div className="flex items-center justify-between pt-1.5 border-t border-dashed border-neutral-200 dark:border-neutral-800 text-[11px]">
-            <span className="text-amber-600 dark:text-amber-400 font-medium">Excess Over Limit:</span>
-            <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
-              +{excessCount} pack(s)
-            </span>
-          </div>
-        </div>
-
-        {/* Policy / Commissary Rule Reminder */}
-        <div className="flex items-start space-x-2 text-[11px] text-neutral-500 dark:text-neutral-400 mb-5 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20">
-          <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-          <p>
-            Commissary package tiers are strictly regulated to maintain batch quality and packaging capacities.
-          </p>
+          {excessCount > 0 && attemptedTotal > tier.baseCapacity && (
+            <div className="flex items-center justify-between pt-1 border-t border-dashed border-neutral-200 dark:border-neutral-800 text-[11px]">
+              <span className="text-amber-600 dark:text-amber-400 font-medium">Prevented Excess:</span>
+              <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                +{excessCount} pack(s)
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -165,26 +199,44 @@ export const PackageCapacityWarningModal: React.FC<PackageCapacityWarningModalPr
               className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-[#F37021] to-[#e06214] hover:from-[#e06214] hover:to-[#c85510] text-white text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center space-x-2 cursor-pointer active:scale-[0.98]"
             >
               <Sparkles className="w-4 h-4" />
-              <span>Upgrade to {nextTier.name} Package ({nextTier.rangeLabel})</span>
-              <ArrowUpRight className="w-4 h-4" />
+              <span>Switch to {nextTier.name} Package ({nextTier.baseCapacity} packs)</span>
+              <ArrowRight className="w-4 h-4" />
             </button>
           )}
 
-          {onAutoAdjust && (
+          {highestTier && highestTier.id !== nextTier?.id && onUpgradeTier && (
+            <button
+              type="button"
+              onClick={() => {
+                onUpgradeTier(highestTier!.id);
+                onClose();
+              }}
+              className={`w-full py-2.5 px-4 rounded-2xl text-xs font-bold border transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+                isDark
+                  ? 'bg-neutral-800 border-neutral-700 hover:bg-neutral-700 text-neutral-100'
+                  : 'bg-white border-neutral-300 hover:bg-neutral-100 text-neutral-800 shadow-2xs'
+              }`}
+            >
+              <ArrowUpRight className="w-4 h-4 text-[#F37021]" />
+              <span>Switch to {highestTier.name} Package ({highestTier.baseCapacity} packs)</span>
+            </button>
+          )}
+
+          {onAutoAdjust && attemptedTotal > tier.baseCapacity && (
             <button
               type="button"
               onClick={() => {
                 onAutoAdjust();
                 onClose();
               }}
-              className={`w-full py-2.5 px-4 rounded-2xl text-xs font-bold border transition-all flex items-center justify-center space-x-1.5 ${
+              className={`w-full py-2 px-4 rounded-2xl text-xs font-semibold border transition-all flex items-center justify-center space-x-1.5 ${
                 isDark
-                  ? 'bg-neutral-800 border-neutral-700 hover:bg-neutral-700 text-neutral-200'
-                  : 'bg-neutral-100 border-neutral-200 hover:bg-neutral-200 text-neutral-800'
+                  ? 'bg-neutral-850 border-neutral-800 hover:bg-neutral-800 text-neutral-300'
+                  : 'bg-neutral-100 border-neutral-200 hover:bg-neutral-200 text-neutral-700'
               }`}
             >
               <Check className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Auto-Adjust to Max Cap ({maxCap} packs)</span>
+              <span>Adjust Quantities to Base Capacity ({tier.baseCapacity} packs)</span>
             </button>
           )}
 
@@ -197,7 +249,7 @@ export const PackageCapacityWarningModal: React.FC<PackageCapacityWarningModalPr
                 : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-100'
             }`}
           >
-            Keep Selection & Adjust Manually
+            Keep Selection ({Math.min(attemptedTotal, tier.baseCapacity)} packs)
           </button>
         </div>
       </div>

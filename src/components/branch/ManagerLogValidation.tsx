@@ -18,6 +18,7 @@ import {
   ArrowRight,
   RotateCcw,
   XCircle,
+  Boxes,
 } from 'lucide-react';
 import { DailyLogStatus, DailyShiftLog } from '../../types';
 import { InboundApprovalQueue } from './InboundApprovalQueue';
@@ -29,6 +30,7 @@ export const ManagerLogValidation: React.FC = () => {
     dailyShiftLogs,
     validateAndLockDailyLog,
     rejectAndReturnDailyLog,
+    approveInboundManifest,
     themeMode,
   } = useData();
 
@@ -51,6 +53,71 @@ export const ManagerLogValidation: React.FC = () => {
   const [managerNotes, setManagerNotes] = useState<string>('');
   const [rejectionReason, setRejectionReason] = useState<string>('');
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
+  const [showApprovalHistory, setShowApprovalHistory] = useState<boolean>(false);
+
+  // Find all pending inbound manifests across all branch logs (especially today's in-progress logs)
+  const pendingInboundManifests = useMemo(() => {
+    const manifests: Record<string, {
+      logId: string;
+      logDate: string;
+      manifestNumber: string;
+      supplierOrSource: string;
+      verifiedAt: string;
+      items: any[];
+    }> = {};
+
+    branchLogs.forEach((log) => {
+      (log.inboundReceiving || []).forEach((item) => {
+        if (item.status !== 'approved') {
+          const key = `${log.id}-${item.manifestNumber}`;
+          if (!manifests[key]) {
+            manifests[key] = {
+              logId: log.id,
+              logDate: log.date,
+              manifestNumber: item.manifestNumber,
+              supplierOrSource: item.supplierOrSource,
+              verifiedAt: item.verifiedAt,
+              items: [],
+            };
+          }
+          manifests[key].items.push(item);
+        }
+      });
+    });
+
+    return Object.values(manifests);
+  }, [branchLogs]);
+
+  // Find all approved inbound manifests
+  const approvedInboundManifests = useMemo(() => {
+    const manifests: Record<string, {
+      logId: string;
+      logDate: string;
+      manifestNumber: string;
+      supplierOrSource: string;
+      items: any[];
+    }> = {};
+
+    branchLogs.forEach((log) => {
+      (log.inboundReceiving || []).forEach((item) => {
+        if (item.status === 'approved') {
+          const key = `${log.id}-${item.manifestNumber}`;
+          if (!manifests[key]) {
+            manifests[key] = {
+              logId: log.id,
+              logDate: log.date,
+              manifestNumber: item.manifestNumber,
+              supplierOrSource: item.supplierOrSource,
+              items: [],
+            };
+          }
+          manifests[key].items.push(item);
+        }
+      });
+    });
+
+    return Object.values(manifests);
+  }, [branchLogs]);
 
   const selectedLog = useMemo(() => {
     return branchLogs.find((l) => l.id === selectedLogId) || branchLogs[0];
@@ -129,6 +196,136 @@ export const ManagerLogValidation: React.FC = () => {
             <span>Store Lead: {currentUser?.name}</span>
           </span>
         </div>
+      </div>
+
+      {/* Receiving Approvals Panel */}
+      <div className={`p-5 rounded-2xl border ${
+        isDark ? 'bg-[#161616] border-neutral-800' : 'bg-white border-neutral-200 shadow-xs'
+      }`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-200/80 dark:border-neutral-800 pb-3 mb-4">
+          <div className="flex items-center space-x-3">
+            <span className="p-2 rounded-full bg-[#80C7F2]/15 text-[#0369a1] dark:text-[#80C7F2] flex items-center justify-center shrink-0 shadow-xs">
+              <Boxes className="w-4 h-4" />
+            </span>
+            <div>
+              <h2 className="text-sm sm:text-base font-extrabold text-neutral-900 dark:text-white flex items-center space-x-2 leading-none">
+                <span>Receiving Approvals</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  pendingInboundManifests.length > 0 
+                    ? 'bg-[#F37021] text-white animate-pulse' 
+                    : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400 font-bold'
+                }`}>
+                  {pendingInboundManifests.length} pending
+                </span>
+              </h2>
+              <p className="text-[11px] text-neutral-500 font-medium mt-1 leading-none">
+                Accepted packs are added to Current Stock after branch-manager approval.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowApprovalHistory(!showApprovalHistory)}
+            className="text-xs font-bold text-[#F37021] hover:text-[#e05f10] transition-colors hover:underline cursor-pointer"
+          >
+            {showApprovalHistory ? 'Hide approval history' : 'Show approval history'}
+          </button>
+        </div>
+
+        {/* History view */}
+        {showApprovalHistory && (
+          <div className="space-y-3 mb-4 p-4 rounded-xl bg-neutral-50 dark:bg-[#1a1a1a] border border-neutral-200 dark:border-neutral-800">
+            <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2">
+              Recently Approved Manifests ({approvedInboundManifests.length})
+            </h3>
+            {approvedInboundManifests.length === 0 ? (
+              <p className="text-xs text-neutral-400 italic">No historical approvals found in this shift log.</p>
+            ) : (
+              <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
+                {approvedInboundManifests.map((mnf) => (
+                  <div key={mnf.manifestNumber} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <strong className="font-mono text-neutral-950 dark:text-white">{mnf.manifestNumber}</strong>
+                        <span className="text-[10px] text-neutral-400">Shift Date: {mnf.logDate}</span>
+                      </div>
+                      <p className="text-[11px] text-neutral-500 mt-0.5">
+                        {mnf.items.map((it) => `${it.receivedUnits}x ${it.productName}`).join(', ')}
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md self-start sm:self-center">
+                      STOCK CREDITED
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Main Pending Approvals List */}
+        {pendingInboundManifests.length === 0 ? (
+          <p className="text-xs text-neutral-400 italic p-2 text-center">
+            No receipts to review. Submitted deliveries will appear here.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {pendingInboundManifests.map((mnf) => (
+              <div
+                key={mnf.manifestNumber}
+                className="p-4 rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-[#121212] flex flex-col justify-between space-y-3"
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold font-mono text-neutral-900 dark:text-white select-all">
+                      Manifest: {mnf.manifestNumber}
+                    </span>
+                    <span className="text-[10px] text-[#F37021] bg-[#F37021]/15 px-2 py-0.5 rounded-md font-bold">
+                      Pending Action
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-neutral-400 mt-0.5">Source: {mnf.supplierOrSource}</p>
+                  
+                  <div className="mt-3 space-y-1 bg-white dark:bg-[#181818] p-2.5 rounded-xl border border-neutral-200/60 dark:border-neutral-800">
+                    <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Flavors to Credit:</p>
+                    {mnf.items.map((it) => (
+                      <div key={it.id} className="flex justify-between items-center text-xs">
+                        <span className="font-semibold text-neutral-800 dark:text-neutral-200">{it.productName}</span>
+                        <span className="font-mono font-bold text-sky-600 dark:text-sky-400">{it.receivedUnits} packs</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end pt-2 border-t border-neutral-200/60 dark:border-neutral-800/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const res = approveInboundManifest(mnf.logId, mnf.manifestNumber, currentUser?.name || 'Branch Manager');
+                      if (res.success) {
+                        setFeedback({
+                          text: `Successfully approved manifest ${mnf.manifestNumber}. Stock has been credited immediately to Current Stock!`,
+                          type: 'success',
+                        });
+                        setTimeout(() => setFeedback(null), 5000);
+                      } else {
+                        setFeedback({
+                          text: res.error || 'Failed to approve manifest.',
+                          type: 'error',
+                        });
+                      }
+                    }}
+                    className="w-full sm:w-auto px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-1.5 shadow-sm active:scale-98"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Approve & Credit to Stock</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {feedback && (
@@ -405,6 +602,88 @@ export const ManagerLogValidation: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            {/* Inbound Received Shipments Inspection */}
+            <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#181818] shadow-xs">
+              <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 font-bold text-xs sm:text-sm text-neutral-900 dark:text-white flex items-center justify-between">
+                <span>Inbound Received Shipments Verification</span>
+                <span className="text-[10px] uppercase font-bold text-sky-600 dark:text-[#80C7F2] bg-sky-50 dark:bg-sky-950/40 px-2 py-0.5 rounded-md">
+                  Active Stock-In on Lock
+                </span>
+              </div>
+
+              {selectedLog.inboundReceiving && selectedLog.inboundReceiving.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850/50 text-[11px] font-bold uppercase text-neutral-500">
+                        <th className="py-2.5 px-3">Manifest / Source</th>
+                        <th className="py-2.5 px-3">Gourmet Flavor</th>
+                        <th className="py-2.5 px-2 text-center">Expected</th>
+                        <th className="py-2.5 px-2 text-center">Received</th>
+                        <th className="py-2.5 px-3 text-center">Condition</th>
+                        <th className="py-2.5 px-3">Notes & Observations</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
+                      {selectedLog.inboundReceiving.map((item) => (
+                        <tr key={item.id} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30">
+                          <td className="py-3 px-3 font-semibold text-neutral-900 dark:text-white">
+                            <div className="font-mono text-xs">{item.manifestNumber}</div>
+                            <div className="text-[10px] text-neutral-400 font-normal">{item.supplierOrSource}</div>
+                          </td>
+                          <td className="py-3 px-3 text-neutral-800 dark:text-neutral-200 font-medium">
+                            {item.productName}
+                          </td>
+                          <td className="py-3 px-2 text-center font-mono text-neutral-500">
+                            {item.expectedUnits}
+                          </td>
+                          <td className="py-3 px-2 text-center font-mono font-bold text-[#0369a1] dark:text-[#80C7F2]">
+                            {item.receivedUnits}
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              item.condition === 'good'
+                                ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                : item.condition === 'damaged'
+                                ? 'text-rose-700 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-300'
+                                : 'text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300'
+                            }`}>
+                              {item.condition.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-neutral-600 dark:text-neutral-400 max-w-xs">
+                            <div className="line-clamp-2 text-[11px]" title={item.notes}>
+                              {item.notes || <span className="text-neutral-300 italic">No notes</span>}
+                            </div>
+                            {item.damageProof && (
+                              <div className="mt-1">
+                                <a
+                                  href={item.damageProof.dataUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center space-x-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400 hover:underline"
+                                >
+                                  <span>View Damage Proof Photo</span>
+                                </a>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="p-3 text-[11px] text-neutral-500 bg-neutral-50/50 dark:bg-neutral-900/50 border-t border-neutral-100 dark:border-neutral-850 flex items-center space-x-1.5">
+                    <span className="text-[#0369a1] dark:text-[#80C7F2] font-bold">💡 Note:</span>
+                    <span>Upon approving and locking this shift log, these received packs will be automatically added to store active stock and made available for sales.</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-5 text-center text-xs text-neutral-400">
+                  No inbound shipments or manifest stock-ins recorded for this shift.
+                </div>
+              )}
             </div>
 
             {/* Manager Audit Decisions & Actions Card */}

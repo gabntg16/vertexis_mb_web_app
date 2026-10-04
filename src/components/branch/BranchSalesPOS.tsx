@@ -23,7 +23,6 @@ import {
   Search,
   RefreshCw,
   Download,
-  Upload,
   CreditCard,
   Banknote,
   Smartphone,
@@ -31,7 +30,6 @@ import {
   User,
   SlidersHorizontal,
   X,
-  FileSpreadsheet,
   Check,
   Zap,
   Info,
@@ -68,7 +66,6 @@ export const BranchSalesPOS: React.FC = () => {
     registerShift,
     openRegisterShift,
     processPOSTransaction,
-    importBatchSales,
     getInventoryForBranch,
     getReceiptsForBranch,
     getZReadingsForBranch,
@@ -83,8 +80,8 @@ export const BranchSalesPOS: React.FC = () => {
   const branchReceipts = getReceiptsForBranch(branchId);
   const branchZReadings = getZReadingsForBranch(branchId);
 
-  // Active Tab: 'register' | 'receipts' | 'zreadings' | 'batchSync'
-  const [activeTab, setActiveTab] = useState<'register' | 'receipts' | 'zreadings' | 'batchSync'>('register');
+  // Active Tab: 'register' | 'receipts' | 'zreadings'
+  const [activeTab, setActiveTab] = useState<'register' | 'receipts' | 'zreadings'>('register');
 
   // Search & Category Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -128,12 +125,6 @@ export const BranchSalesPOS: React.FC = () => {
   // Notifications
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
-  // Batch & Offline Import State
-  const [csvText, setCsvText] = useState('');
-  const [importResult, setImportResult] = useState<{ successCount: number; errors: string[] } | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Stock lookup map
   const stockMap = useMemo(() => {
@@ -435,54 +426,6 @@ export const BranchSalesPOS: React.FC = () => {
     }
   };
 
-  // Batch Sales & Offline Import
-  const handleImportCsv = () => {
-    if (!csvText.trim()) {
-      setErrorMsg('Please paste batch sales CSV text.');
-      return;
-    }
-    setIsImporting(true);
-    setErrorMsg(null);
-    setImportResult(null);
-    try {
-      const lines = csvText.trim().split('\n');
-      const parsedRows: Array<{
-        flavor: string;
-        quantity: number;
-        total: number;
-        date?: string;
-        paymentMethod?: string;
-        receipt?: string;
-      }> = [];
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line || (i === 0 && line.toLowerCase().includes('flavor'))) continue;
-
-        const parts = line.split(',').map((p) => p.trim().replace(/^["']|["']$/g, ''));
-        if (parts.length >= 2) {
-          const flavor = parts[0];
-          const quantity = parseInt(parts[1], 10) || 1;
-          const total = parseFloat(parts[2]) || 0;
-          const paymentMethod = parts[3] || 'Cash';
-          const date = parts[4] || new Date().toISOString();
-          const receipt = parts[5] || `IMP-REC-${Date.now().toString().slice(-4)}-${i}`;
-
-          parsedRows.push({ flavor, quantity, total, paymentMethod, date, receipt });
-        }
-      }
-
-      const res = importBatchSales(parsedRows);
-      setImportResult(res);
-      setSuccessMsg(`Successfully imported ${res.successCount} sales records into VertexIS database.`);
-      setCsvText('');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to parse CSV');
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
       
@@ -576,16 +519,6 @@ export const BranchSalesPOS: React.FC = () => {
               }`}
             >
               Shift Closings ({branchZReadings.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('batchSync')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                activeTab === 'batchSync'
-                  ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-xs'
-                  : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
-              }`}
-            >
-              Offline Batch Sync
             </button>
           </div>
 
@@ -1152,81 +1085,6 @@ export const BranchSalesPOS: React.FC = () => {
                 )}
               </tbody>
             </table>
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          TAB 4: BATCH & OFFLINE SALES CSV IMPORT & RECONCILIATION
-          ========================================================================= */}
-      {activeTab === 'batchSync' && (
-        <div className="p-5 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200/90 dark:border-neutral-800 shadow-xs space-y-4">
-          <div className="pb-3 border-b border-neutral-200 dark:border-neutral-800">
-            <h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 flex items-center space-x-2">
-              <FileSpreadsheet className="w-4 h-4 text-[#F37021]" />
-              <span>Offline POS & Batch CSV Ingestion</span>
-            </h3>
-            <p className="text-xs text-neutral-500 mt-0.5">
-              Ingest offline terminal batches and popup stall CSV sales logs into VertexIS to automatically reconcile inventory and sales ledgers.
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 block mb-1">
-                CSV Data (Format: flavor, quantity, total, paymentMethod, date, receiptNumber)
-              </label>
-              <textarea
-                rows={6}
-                value={csvText}
-                onChange={(e) => setCsvText(e.target.value)}
-                placeholder={`Ube Velvet, 3, 447, GCash, 2026-08-20T14:30:00.000Z, REC-OFFLINE-1001\nMatcha Dream, 2, 298, Cash, 2026-08-20T15:10:00.000Z, REC-OFFLINE-1002\nMango Tango, 1, 149, Maya, 2026-08-20T16:00:00.000Z, REC-OFFLINE-1003`}
-                className="w-full p-3 text-xs font-mono bg-neutral-50 dark:bg-neutral-800/80 border border-neutral-300 dark:border-neutral-700 rounded-xl focus:ring-1 focus:ring-[#F37021] focus:outline-hidden"
-              ></textarea>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() =>
-                  setCsvText(
-                    `Ube Velvet, 4, 596, Cash, 2026-08-21T10:00:00.000Z, REC-OFFLINE-9001\nChocolate Silk, 3, 447, GCash, 2026-08-21T11:15:00.000Z, REC-OFFLINE-9002\nMatcha Dream, 2, 298, Maya, 2026-08-21T12:30:00.000Z, REC-OFFLINE-9003\nStrawberry Swirl, 1, 149, Cash, 2026-08-21T13:00:00.000Z, REC-OFFLINE-9004`
-                  )
-                }
-                className="text-xs text-[#F37021] hover:underline font-medium"
-              >
-                Fill Sample Batch Records
-              </button>
-
-              <button
-                type="button"
-                disabled={isImporting || !csvText.trim()}
-                onClick={handleImportCsv}
-                className="px-4 py-2 bg-[#F37021] hover:bg-[#d95d14] disabled:opacity-40 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center space-x-1.5"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>{isImporting ? 'Processing Batch...' : 'Process Batch Ingestion'}</span>
-              </button>
-            </div>
-
-            {importResult && (
-              <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 space-y-2 text-xs">
-                <div className="flex items-center space-x-2 text-emerald-600 font-bold">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Successfully imported {importResult.successCount} sales records!</span>
-                </div>
-                {importResult.errors.length > 0 && (
-                  <div className="space-y-1 text-red-500">
-                    <p className="font-semibold">Import Warnings:</p>
-                    <ul className="list-disc list-inside space-y-0.5 text-[11px]">
-                      {importResult.errors.map((err, i) => (
-                        <li key={i}>{err}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       )}

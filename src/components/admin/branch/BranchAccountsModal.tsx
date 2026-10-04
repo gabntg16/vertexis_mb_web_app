@@ -13,6 +13,7 @@ import {
   XCircle,
   Mail,
   Phone,
+  Trash2,
 } from 'lucide-react';
 
 interface BranchAccountsModalProps {
@@ -61,6 +62,7 @@ export const BranchAccountsModal: React.FC<BranchAccountsModalProps> = ({
     createBranchAccount,
     resetBranchAccountPassword,
     toggleBranchAccountActive,
+    deleteBranchAccount,
     sendAccountCredentials,
     themeMode,
   } = useData();
@@ -390,6 +392,19 @@ export const BranchAccountsModal: React.FC<BranchAccountsModalProps> = ({
                           }`}
                         >
                           {acc.isActive ? 'Deactivate' : 'Enable'}
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Are you absolutely sure you want to permanently delete the account for ${acc.fullName}?`)) {
+                              deleteBranchAccount(acc.id);
+                            }
+                          }}
+                          className="px-2 py-1 rounded-lg text-[11px] font-semibold text-rose-500 hover:bg-rose-500/10 transition-colors flex items-center space-x-1 cursor-pointer"
+                          title="Permanently Delete Account"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Delete</span>
                         </button>
                       </div>
                     </div>

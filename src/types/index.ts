@@ -846,6 +846,9 @@ export interface DailyInboundReceivingItem {
     fileSize: string;
     dataUrl: string;
   };
+  status?: 'pending' | 'approved';
+  approvedAt?: string;
+  approvedBy?: string;
 }
 
 export interface DailyShiftLog {
