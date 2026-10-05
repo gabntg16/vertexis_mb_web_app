@@ -198,10 +198,29 @@ export const BranchOrders: React.FC = () => {
     } else {
       targetTier = 'silver';
     }
+
+    const targetTierConfig = PACKAGE_TIERS.find((t) => t.id === targetTier) || PACKAGE_TIERS[0];
+
+    // Enforce strict package base capacity limit on auto-fill
+    let remainingToAllocate = targetTierConfig.baseCapacity;
+    const clampedQuantities: Record<string, number> = {};
+    for (const [pId, qty] of Object.entries(suggestedQuantities)) {
+      if (remainingToAllocate <= 0) {
+        clampedQuantities[pId] = 0;
+      } else if (qty <= remainingToAllocate) {
+        clampedQuantities[pId] = qty;
+        remainingToAllocate -= qty;
+      } else {
+        clampedQuantities[pId] = remainingToAllocate;
+        remainingToAllocate = 0;
+      }
+    }
+
+    const finalFilledTotal = Object.values(clampedQuantities).reduce((s, q) => s + (q || 0), 0);
     setSelectedTierId(targetTier);
-    setQuantities(suggestedQuantities);
+    setQuantities(clampedQuantities);
     setOrderSuccessMsg(
-      `Auto-filled ${totalSuggested} packs based on Exponential Smoothing (α=0.3) demand velocity (Wastage isolated).`
+      `Auto-filled ${finalFilledTotal} packs (capped to ${targetTierConfig.name} Package base capacity of ${targetTierConfig.baseCapacity} packs) based on Exponential Smoothing (α=0.3) demand velocity.`
     );
     setTimeout(() => setOrderSuccessMsg(null), 5000);
   };
@@ -573,13 +592,9 @@ export const BranchOrders: React.FC = () => {
           <div className="flex flex-col items-end space-y-1">
             <div className="flex items-center space-x-2">
               <span
-                className={`text-xs font-bold px-2.5 py-1 rounded-xl border ${
-                  isCapReached
-                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300'
-                    : 'bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300'
-                }`}
+                className="text-xs font-bold px-2.5 py-1 rounded-xl border bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300"
               >
-                Total: {totalPacks} / {currentTier.baseCapacity} packs {isCapReached ? '(Max Limit Reached)' : ''}
+                Total: {totalPacks} / {currentTier.baseCapacity} packs
               </span>
               <button
                 id="requisition-tour-autofill-btn"
@@ -599,115 +614,8 @@ export const BranchOrders: React.FC = () => {
                 Reset
               </button>
             </div>
-
-            {/* Helper Text below total counter */}
-            {isCapReached && (
-              <button
-                type="button"
-                onClick={() =>
-                  setExceedWarning({
-                    isOpen: true,
-                    tier: currentTier,
-                    attemptedTotal: totalPacks,
-                    maxCap: currentTier.baseCapacity,
-                    reason: 'cap_reached',
-                  })
-                }
-                className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline animate-in fade-in flex items-center space-x-1 cursor-pointer"
-              >
-                <AlertCircle className="w-3.5 h-3.5" />
-                <span>
-                  {currentTier.name} Maximum Limit Reached ({currentTier.baseCapacity}/{currentTier.baseCapacity} packs).
-                  {selectedTierId === 'silver' ? ' Switch to Gold to add more.' : selectedTierId === 'gold' ? ' Switch to Platinum to add more.' : ' View package details.'}
-                </span>
-              </button>
-            )}
           </div>
         </div>
-
-        {/* Clear Maximum Limit Reached Alert Banner */}
-        {isCapReached && (
-          <div
-            id="package-limit-reached-alert"
-            role="alert"
-            className={`mt-4 p-4 rounded-2xl border transition-all animate-in fade-in slide-in-from-top-2 duration-200 ${
-              isDark
-                ? 'bg-amber-950/40 border-amber-500/40 text-amber-100 shadow-md shadow-amber-950/30'
-                : 'bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-amber-300 text-neutral-900 shadow-xs'
-            }`}
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start space-x-3">
-                <div className="p-2 rounded-xl bg-amber-500 text-white shadow-xs shrink-0 mt-0.5">
-                  <AlertCircle className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/30">
-                      Maximum Limit Reached
-                    </span>
-                    <h4 className="text-sm font-bold text-neutral-900 dark:text-white">
-                      Maximum Limit Reached for {currentTier.name} Package ({totalPacks}/{currentTier.baseCapacity} packs)
-                    </h4>
-                  </div>
-                  <p className="text-xs text-neutral-600 dark:text-neutral-300 mt-1 leading-relaxed">
-                    You have reached the strict maximum base capacity limit of <strong>{currentTier.baseCapacity} packs</strong> for the <strong>{currentTier.name} Package</strong>. Further packs cannot be added to this package tier.
-                  </p>
-                  {selectedTierId === 'silver' && (
-                    <p className="text-xs text-[#d95d12] dark:text-amber-300 font-semibold mt-1 flex items-center space-x-1">
-                      <span>💡 <strong>Recommendation:</strong> Switch to the <strong>Gold Package (55 packs)</strong> or <strong>Platinum Package (70 packs)</strong> if you wish to order more packs.</span>
-                    </p>
-                  )}
-                  {selectedTierId === 'gold' && (
-                    <p className="text-xs text-[#d95d12] dark:text-amber-300 font-semibold mt-1 flex items-center space-x-1">
-                      <span>💡 <strong>Recommendation:</strong> Switch to the <strong>Platinum Package (70 packs)</strong> if you wish to order more packs.</span>
-                    </p>
-                  )}
-                  {selectedTierId === 'platinum' && (
-                    <p className="text-xs text-neutral-500 dark:text-neutral-400 font-medium mt-1">
-                      Platinum is our maximum package tier (70 packs). To order larger bulk commissary volumes, please place an additional requisition or contact commissary management.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {selectedTierId === 'silver' && (
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleUpgradeToNextTier('gold')}
-                    className="px-4 py-2.5 rounded-xl bg-[#F37021] hover:bg-[#e06214] text-white text-xs font-bold shadow-sm transition-all flex items-center space-x-1.5 active:scale-95 cursor-pointer"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Switch to Gold (55 packs)</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleUpgradeToNextTier('platinum')}
-                    className="px-3 py-2.5 rounded-xl bg-neutral-200 dark:bg-neutral-800 hover:bg-neutral-300 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer"
-                  >
-                    <span>Platinum (70)</span>
-                  </button>
-                </div>
-              )}
-
-              {selectedTierId === 'gold' && (
-                <div className="shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleUpgradeToNextTier('platinum')}
-                    className="px-4 py-2.5 rounded-xl bg-[#F37021] hover:bg-[#e06214] text-white text-xs font-bold shadow-sm transition-all flex items-center space-x-1.5 active:scale-95 cursor-pointer"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Switch to Platinum (70 packs)</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Flavor Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-5">

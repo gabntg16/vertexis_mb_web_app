@@ -1,5 +1,6 @@
-import React from 'react';
-import { AlertTriangle, Layers, ArrowUpRight, X, ShieldAlert, Sparkles, Check, ArrowRight } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { AlertTriangle, Layers, ArrowUpRight, X, Sparkles, Check, ArrowRight } from 'lucide-react';
 import { PackageTier, PACKAGE_TIERS } from './BranchOrders';
 
 export interface PackageExceedWarningDetails {
@@ -27,7 +28,34 @@ export const PackageCapacityWarningModal: React.FC<PackageCapacityWarningModalPr
   onUpgradeTier,
   onAutoAdjust,
 }) => {
-  if (!warning || !warning.isOpen) return null;
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Escape key handler & scroll lock
+  useEffect(() => {
+    if (!warning || !warning.isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [warning, onClose]);
+
+  if (!warning || !warning.isOpen || !mounted || typeof document === 'undefined') return null;
 
   const isDark = themeMode === 'dark';
   const { tier, attemptedTotal, maxCap, productFlavor, reason, targetTier } = warning;
@@ -44,15 +72,17 @@ export const PackageCapacityWarningModal: React.FC<PackageCapacityWarningModalPr
 
   const excessCount = Math.max(1, attemptedTotal - maxCap);
 
-  return (
+  const modalContent = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-labelledby="exceed-dialog-title"
+      onClick={onClose}
     >
       <div
-        className={`w-full max-w-md rounded-3xl p-6 border shadow-2xl transition-all relative overflow-hidden animate-in zoom-in-95 duration-200 ${
+        onClick={(e) => e.stopPropagation()}
+        className={`w-full max-w-md mx-4 sm:mx-auto my-auto rounded-3xl p-4 sm:p-6 border shadow-2xl transition-all relative max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 ${
           isDark
             ? 'bg-neutral-900 border-amber-500/30 text-neutral-100 shadow-amber-950/20'
             : 'bg-white border-amber-500/30 text-neutral-900 shadow-amber-500/10'
@@ -66,24 +96,25 @@ export const PackageCapacityWarningModal: React.FC<PackageCapacityWarningModalPr
         <button
           type="button"
           onClick={onClose}
-          className={`absolute top-4 right-4 p-1.5 rounded-full transition-colors ${
+          className={`absolute top-3.5 right-3.5 sm:top-4 sm:right-4 p-2 rounded-xl transition-colors cursor-pointer ${
             isDark ? 'text-neutral-400 hover:text-white hover:bg-neutral-800' : 'text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100'
           }`}
           title="Close Warning"
+          aria-label="Close Warning"
         >
           <X className="w-4 h-4" />
         </button>
 
         {/* Header with glowing icon badge */}
         <div className="flex items-start space-x-3.5 mb-4">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 shadow-xs">
-            <AlertTriangle className="w-6 h-6" />
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 shadow-xs">
+            <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <div className="pr-6">
             <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25">
               Maximum Limit Reached
             </span>
-            <h3 id="exceed-dialog-title" className="text-lg font-black tracking-tight mt-1 leading-snug text-neutral-900 dark:text-white">
+            <h3 id="exceed-dialog-title" className="text-base sm:text-lg font-black tracking-tight mt-1 leading-snug text-neutral-900 dark:text-white">
               Package Limit Reached
             </h3>
           </div>
@@ -187,8 +218,8 @@ export const PackageCapacityWarningModal: React.FC<PackageCapacityWarningModalPr
           )}
         </div>
 
-        {/* Actions */}
-        <div className="space-y-2">
+        {/* Actions - Vertical Stack with Full Width */}
+        <div className="flex flex-col space-y-2 w-full mt-4">
           {nextTier && onUpgradeTier && (
             <button
               type="button"
@@ -196,11 +227,11 @@ export const PackageCapacityWarningModal: React.FC<PackageCapacityWarningModalPr
                 onUpgradeTier(nextTier!.id);
                 onClose();
               }}
-              className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-[#F37021] to-[#e06214] hover:from-[#e06214] hover:to-[#c85510] text-white text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center space-x-2 cursor-pointer active:scale-[0.98]"
+              className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-[#F37021] to-[#e06214] hover:from-[#e06214] hover:to-[#c85510] text-white text-xs sm:text-sm font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center space-x-2 cursor-pointer active:scale-[0.98]"
             >
-              <Sparkles className="w-4 h-4" />
+              <Sparkles className="w-4 h-4 shrink-0" />
               <span>Switch to {nextTier.name} Package ({nextTier.baseCapacity} packs)</span>
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-4 h-4 shrink-0" />
             </button>
           )}
 
@@ -211,13 +242,13 @@ export const PackageCapacityWarningModal: React.FC<PackageCapacityWarningModalPr
                 onUpgradeTier(highestTier!.id);
                 onClose();
               }}
-              className={`w-full py-2.5 px-4 rounded-2xl text-xs font-bold border transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+              className={`w-full py-2.5 px-4 rounded-2xl text-xs sm:text-sm font-bold border transition-all flex items-center justify-center space-x-1.5 cursor-pointer active:scale-[0.98] ${
                 isDark
                   ? 'bg-neutral-800 border-neutral-700 hover:bg-neutral-700 text-neutral-100'
                   : 'bg-white border-neutral-300 hover:bg-neutral-100 text-neutral-800 shadow-2xs'
               }`}
             >
-              <ArrowUpRight className="w-4 h-4 text-[#F37021]" />
+              <ArrowUpRight className="w-4 h-4 text-[#F37021] shrink-0" />
               <span>Switch to {highestTier.name} Package ({highestTier.baseCapacity} packs)</span>
             </button>
           )}
@@ -229,13 +260,13 @@ export const PackageCapacityWarningModal: React.FC<PackageCapacityWarningModalPr
                 onAutoAdjust();
                 onClose();
               }}
-              className={`w-full py-2 px-4 rounded-2xl text-xs font-semibold border transition-all flex items-center justify-center space-x-1.5 ${
+              className={`w-full py-2.5 px-4 rounded-2xl text-xs sm:text-sm font-semibold border transition-all flex items-center justify-center space-x-1.5 cursor-pointer active:scale-[0.98] ${
                 isDark
                   ? 'bg-neutral-850 border-neutral-800 hover:bg-neutral-800 text-neutral-300'
                   : 'bg-neutral-100 border-neutral-200 hover:bg-neutral-200 text-neutral-700'
               }`}
             >
-              <Check className="w-3.5 h-3.5 text-emerald-500" />
+              <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
               <span>Adjust Quantities to Base Capacity ({tier.baseCapacity} packs)</span>
             </button>
           )}
@@ -243,7 +274,7 @@ export const PackageCapacityWarningModal: React.FC<PackageCapacityWarningModalPr
           <button
             type="button"
             onClick={onClose}
-            className={`w-full py-2.5 px-4 rounded-2xl text-xs font-semibold transition-all ${
+            className={`w-full py-2.5 px-4 rounded-2xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
               isDark
                 ? 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/60'
                 : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-100'
@@ -255,4 +286,8 @@ export const PackageCapacityWarningModal: React.FC<PackageCapacityWarningModalPr
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };
+
+export default PackageCapacityWarningModal;

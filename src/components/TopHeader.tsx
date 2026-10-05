@@ -672,7 +672,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                           setShowUserMenu(false);
                           setShowLogoutConfirm(true);
                         }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                       >
                         <LogOut className="w-3.5 h-3.5" />
                         <span>Sign Out of VertexIS</span>
@@ -682,18 +682,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 </>
               )}
             </div>
-
-            {/* Direct Quick Logout Button */}
-            <button
-              id="top-quick-logout-btn"
-              type="button"
-              onClick={() => setShowLogoutConfirm(true)}
-              className="mallow-header-control p-2 rounded-xl border transition-colors bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:border-rose-900/60 dark:hover:text-rose-400"
-              title="Sign Out of VertexIS"
-              aria-label="Sign Out of VertexIS"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
 
           </div>
         </div>

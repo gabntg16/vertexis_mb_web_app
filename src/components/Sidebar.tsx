@@ -25,12 +25,10 @@ import {
   ChevronRight,
   Tag,
   ArrowLeftRight,
-  LogOut,
   Settings,
 } from 'lucide-react';
 import { isSuperAdmin, isBranchManager, isBranchStaff } from '../utils/securityValidator';
 import { DailyLogStatus } from '../types';
-import { LogoutConfirmModal } from './common/LogoutConfirmModal';
 
 interface SidebarProps {
   activeTab: string;
@@ -54,11 +52,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     orders,
     deliveries,
     dailyShiftLogs,
-    logout,
   } = useData();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const mobileDialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -459,62 +455,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
           isCollapsed && !isMobileOpen ? 'flex flex-col items-center gap-2' : ''
         }`}>
           {isCollapsed && !isMobileOpen ? (
-            <>
+            <button
+              type="button"
+              onClick={() => handleTabClick('account_settings')}
+              className="w-10 h-10 rounded-xl bg-[#80C7F2] text-neutral-950 font-black text-xs flex items-center justify-center shadow-2xs hover:opacity-90 transition-opacity"
+              title={`Account: ${currentUser.name}`}
+              aria-label={`Account settings for ${currentUser.name}`}
+            >
+              {userInitials}
+            </button>
+          ) : (
+            <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white dark:bg-neutral-800/80 border border-neutral-200/70 dark:border-neutral-700/70 shadow-2xs">
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-[#80C7F2] text-neutral-950 font-black text-xs flex items-center justify-center shrink-0">
+                  {userInitials}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-xs text-neutral-900 dark:text-white truncate">
+                    {currentUser.name}
+                  </p>
+                  <p className="text-[10px] text-neutral-400 truncate">
+                    {currentRoleConfig.roleTitle}
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => handleTabClick('account_settings')}
-                className="w-10 h-10 rounded-xl bg-[#80C7F2] text-neutral-950 font-black text-xs flex items-center justify-center shadow-2xs hover:opacity-90 transition-opacity"
-                title={`Account: ${currentUser.name}`}
-                aria-label={`Account settings for ${currentUser.name}`}
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors shrink-0"
+                title="Account Settings"
+                aria-label="Account Settings"
               >
-                {userInitials}
-              </button>
-              <button
-                id="sidebar-collapsed-logout-btn"
-                type="button"
-                onClick={() => setShowLogoutConfirm(true)}
-                className="p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 text-neutral-500 hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 dark:hover:border-rose-900/60 dark:hover:text-rose-400 transition-colors"
-                title="Sign Out of VertexIS"
-                aria-label="Sign Out of VertexIS"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white dark:bg-neutral-800/80 border border-neutral-200/70 dark:border-neutral-700/70 shadow-2xs">
-                <div className="flex items-center space-x-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-[#80C7F2] text-neutral-950 font-black text-xs flex items-center justify-center shrink-0">
-                    {userInitials}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-bold text-xs text-neutral-900 dark:text-white truncate">
-                      {currentUser.name}
-                    </p>
-                    <p className="text-[10px] text-neutral-400 truncate">
-                      {currentRoleConfig.roleTitle}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleTabClick('account_settings')}
-                  className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors shrink-0"
-                  title="Account Settings"
-                  aria-label="Account Settings"
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              <button
-                id="sidebar-signout-btn"
-                type="button"
-                onClick={() => setShowLogoutConfirm(true)}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Sign Out of VertexIS</span>
+                <Settings className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
@@ -551,16 +523,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </dialog>
       )}
-
-      {/* Reusable Logout Confirmation Dialog */}
-      <LogoutConfirmModal
-        open={showLogoutConfirm}
-        onCancel={() => setShowLogoutConfirm(false)}
-        onConfirm={logout}
-        userName={currentUser?.name}
-        userRole={currentRoleConfig?.roleTitle}
-        branchName={currentBranch?.name?.replace('Marsh Bites - ', '') || currentUser?.branchName}
-      />
     </>
   );
 };

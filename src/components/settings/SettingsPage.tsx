@@ -4,7 +4,6 @@ import {
   ChevronRight,
   FileText,
   LockKeyhole,
-  LogOut,
   Mail,
   MapPin,
   ShieldCheck,
@@ -12,7 +11,6 @@ import {
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { isBranchManager, isSuperAdmin } from '../../utils/securityValidator';
-import { LogoutConfirmModal } from '../common/LogoutConfirmModal';
 
 export type SettingsSection = 'account_settings' | 'privacy_settings' | 'legal_terms';
 
@@ -43,8 +41,7 @@ const settingsTabs: Array<{ id: SettingsSection; label: string; icon: React.Elem
 ];
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({ section, onNavigateTab }) => {
-  const { currentUser, currentBranch, logout } = useData();
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const { currentUser, currentBranch } = useData();
   const [privacy, setPrivacy] = useState({
     announcementNotifications: true,
     rememberWorkspace: true,
@@ -212,32 +209,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ section, onNavigateT
               </div>
             </div>
           )}
-
-          <div className="mt-6 flex flex-col gap-3 border-t border-neutral-200 pt-5 dark:border-neutral-800 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-bold text-neutral-900 dark:text-white">Sign out</p>
-              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                End your current VertexIS session on this device.
-              </p>
-            </div>
-            <button
-              id="settings-logout-btn"
-              type="button"
-              onClick={() => setShowLogoutConfirm(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 px-4 py-2.5 text-sm font-bold text-rose-600 transition-colors hover:bg-rose-50 dark:border-rose-900/60 dark:text-rose-400 dark:hover:bg-rose-950/30"
-            >
-              <LogOut className="h-4 w-4" />
-              Sign Out
-            </button>
-          </div>
         </div>
       </div>
-
-      <LogoutConfirmModal
-        open={showLogoutConfirm}
-        onCancel={() => setShowLogoutConfirm(false)}
-        onConfirm={logout}
-      />
     </section>
   );
 };

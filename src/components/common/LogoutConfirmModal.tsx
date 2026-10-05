@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
-import { AlertTriangle, LogOut, X, ShieldCheck } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { LogOut, X, ShieldCheck } from 'lucide-react';
 
-interface LogoutConfirmModalProps {
+export interface LogoutConfirmModalProps {
   open: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -18,28 +19,50 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = ({
   userRole,
   branchName,
 }) => {
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Close on Escape key press and prevent background scrolling while open
+  useEffect(() => {
+    if (!open) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!open) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         onCancel();
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [open, onCancel]);
 
-  if (!open) return null;
+  if (!open || !mounted || typeof document === 'undefined') {
+    return null;
+  }
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 bg-black/60 dark:bg-black/75 backdrop-blur-xs transition-opacity animate-in fade-in duration-150"
+      onClick={onCancel}
+      aria-hidden={!open}
+    >
       <div
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="logout-confirm-title"
         aria-describedby="logout-confirm-description"
-        className="w-full max-w-md rounded-3xl border border-neutral-200 bg-white p-5 sm:p-6 shadow-2xl dark:border-neutral-700 dark:bg-[#1c1c1c] animate-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-md my-auto rounded-3xl border border-neutral-200 bg-white p-5 sm:p-6 shadow-2xl dark:border-neutral-700 dark:bg-[#1c1c1c] animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3.5">
@@ -65,7 +88,7 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = ({
             type="button"
             onClick={onCancel}
             aria-label="Close sign out confirmation"
-            className="rounded-xl p-1.5 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200 shrink-0"
+            className="rounded-xl p-1.5 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200 shrink-0 cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>
@@ -91,7 +114,7 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = ({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-xl border border-neutral-200 dark:border-neutral-700 px-4 py-2.5 text-sm font-bold text-neutral-600 dark:text-neutral-300 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            className="rounded-xl border border-neutral-200 dark:border-neutral-700 px-4 py-2.5 text-sm font-bold text-neutral-600 dark:text-neutral-300 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer"
           >
             Cancel
           </button>
@@ -99,7 +122,7 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = ({
             type="button"
             id="confirm-sign-out-btn"
             onClick={onConfirm}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-bold text-white shadow-xs transition-colors hover:bg-rose-700 active:scale-95"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-bold text-white shadow-xs transition-colors hover:bg-rose-700 active:scale-95 cursor-pointer"
           >
             <LogOut className="h-4 w-4" />
             Yes, Sign Out
@@ -108,6 +131,8 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = ({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };
 
 export default LogoutConfirmModal;

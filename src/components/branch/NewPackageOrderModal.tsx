@@ -423,36 +423,6 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
             </div>
           )}
 
-          {/* Cap Limit or Exceed Alert Banner */}
-          {isCapReached && (
-            <div className="p-3 rounded-xl bg-amber-500/95 text-white text-xs font-semibold leading-snug border border-amber-400 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center space-x-1.5">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>
-                  Maximum limit of <strong>{currentTier.baseCapacity} packs</strong> reached for {currentTier.name} Package. To order more packs, switch to a higher-tier package.
-                </span>
-              </div>
-              {selectedTierId === 'silver' && (
-                <button
-                  type="button"
-                  onClick={() => handleUpgradeToNextTier('gold')}
-                  className="px-3 py-1.5 rounded-lg bg-white text-amber-900 hover:bg-amber-50 text-xs font-bold shrink-0 cursor-pointer shadow-xs"
-                >
-                  ⚡ Switch to Gold (55 packs)
-                </button>
-              )}
-              {selectedTierId === 'gold' && (
-                <button
-                  type="button"
-                  onClick={() => handleUpgradeToNextTier('platinum')}
-                  className="px-3 py-1.5 rounded-lg bg-white text-amber-900 hover:bg-amber-50 text-xs font-bold shrink-0 cursor-pointer shadow-xs"
-                >
-                  ⚡ Switch to Platinum (70 packs)
-                </button>
-              )}
-            </div>
-          )}
-
           {/* Totals and Place Order button */}
           <div className="flex items-center justify-between">
             <div>

@@ -624,3 +624,4 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
   );
 };
 
+export default AdminDashboard;

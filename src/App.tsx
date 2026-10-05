@@ -8,7 +8,46 @@ import { isSuperAdmin, isBranchManager, isBranchStaff } from './utils/securityVa
 
 type ComponentModule = Record<string, React.ComponentType<any>>;
 const lazyNamed = (loader: () => Promise<unknown>, exportName: string) =>
-  lazy(async () => ({ default: (await loader() as ComponentModule)[exportName] }));
+  lazy(async () => {
+    let attempts = 3;
+    let delay = 300;
+    while (attempts > 0) {
+      try {
+        const mod = (await loader()) as ComponentModule;
+        const component = mod[exportName] || (mod as any)?.default;
+        if (component) {
+          return { default: component };
+        }
+        throw new Error(`Export '${exportName}' not found in loaded module.`);
+      } catch (err: any) {
+        attempts--;
+        const isModuleFetchError =
+          err?.message?.includes('Failed to fetch dynamically imported module') ||
+          err?.message?.includes('Importing a module script failed');
+
+        if (attempts > 0) {
+          console.warn(`[LazyLoader] Error loading ${exportName}. Retrying in ${delay}ms...`, err);
+          await new Promise((res) => setTimeout(res, delay));
+          delay *= 2;
+        } else {
+          // If this is a chunk or dynamically imported module fetch error after all retries,
+          // refresh the window once to clear stale Vite cache
+          if (isModuleFetchError && typeof window !== 'undefined') {
+            const reloadKey = `chunk_reload_${exportName}`;
+            const lastReload = sessionStorage.getItem(reloadKey);
+            if (!lastReload || Date.now() - Number(lastReload) > 20000) {
+              sessionStorage.setItem(reloadKey, String(Date.now()));
+              console.warn(`[LazyLoader] Reloading window once to recover fresh module for ${exportName}`);
+              window.location.reload();
+              return new Promise(() => {}); // Wait for reload
+            }
+          }
+          throw err;
+        }
+      }
+    }
+    throw new Error(`Failed to load component ${exportName}`);
+  });
 
 // Load role-specific screens on demand so a cashier does not download every HQ workflow.
 const AdminDashboard = lazyNamed(() => import('./components/admin/AdminDashboard'), 'AdminDashboard');
