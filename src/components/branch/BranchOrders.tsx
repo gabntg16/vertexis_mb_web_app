@@ -1,3 +1,5 @@
+import { usePackageSelection } from '../../hooks/usePackageSelection';
+import { PackageDecisionModal } from '../common/PackageDecisionModal';
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/DataContext';
 import { ListSkeletonItem, EmptyStateBanner } from '../common/SkeletonLoaders';
@@ -42,49 +44,10 @@ import {
 import { JTTrackingModal } from '../common/JTTrackingModal';
 import { JT_EXPRESS_TRACKING_URL } from '../../services/jtExpress';
 import { BranchPaymentModal } from './BranchPaymentModal';
-import { PackageCapacityWarningModal, PackageExceedWarningDetails } from './PackageCapacityWarningModal';
-import { usePackageUpgradeOptimization } from '../../hooks/usePackageUpgradeOptimization';
-import { PackageUpgradeCaution } from '../common/PackageUpgradeCaution';
 
-export interface PackageTier {
-  id: 'silver' | 'gold' | 'platinum';
-  name: string;
-  price: number;
-  baseCapacity: number;
-  maxCap: number; // strict max cap
-  rangeLabel: string;
-}
-
-export const PACKAGE_TIERS: PackageTier[] = [
-  { id: 'silver', name: 'Silver', price: 3999, baseCapacity: 35, maxCap: 35, rangeLabel: '35 packs' },
-  { id: 'gold', name: 'Gold', price: 5775, baseCapacity: 55, maxCap: 55, rangeLabel: '55 packs' },
-  { id: 'platinum', name: 'Platinum', price: 7000, baseCapacity: 70, maxCap: 70, rangeLabel: '70 packs' },
-];
-
-export function calculatePackagePrice(tier: PackageTier, totalPacks: number): {
-  totalPrice: number;
-  isExceeded: boolean;
-  excessPacks: number;
-  ratePerPack: number;
-} {
-  const ratePerPack = tier.price / tier.baseCapacity;
-  if (totalPacks === 0) {
-    return { totalPrice: 0, isExceeded: false, excessPacks: 0, ratePerPack };
-  }
-
-  if (totalPacks <= tier.baseCapacity) {
-    return {
-      totalPrice: tier.price,
-      isExceeded: false,
-      excessPacks: 0,
-      ratePerPack,
-    };
-  }
-
-  const excessPacks = totalPacks - tier.baseCapacity;
-  const totalPrice = tier.price + excessPacks * ratePerPack;
-  return { totalPrice, isExceeded: true, excessPacks, ratePerPack };
-}
+import { PACKAGE_TIERS, calculatePackagePrice } from '../../utils/packagePricing';
+export { PACKAGE_TIERS, calculatePackagePrice } from '../../utils/packagePricing';
+export type { PackageTier } from '../../utils/packagePricing';
 
 const STAGE_CONFIG: Record<ProductionStage, { label: string; icon: React.FC<{ className?: string }>; color: string; bg: string }> = {
   queued: {
@@ -145,8 +108,8 @@ export const BranchOrders: React.FC = () => {
     syncState,
   } = useData();
 
-  const [selectedTierId, setSelectedTierId] = useState<'silver' | 'gold' | 'platinum'>('gold');
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const selection = usePackageSelection('gold');
+  const { tierId: selectedTierId, quantities } = selection.state;
   const [selectedOrderForProof, setSelectedOrderForProof] = useState<Order | null>(null);
   const [orderSuccessMsg, setOrderSuccessMsg] = useState<string | null>(null);
   const [historyTab, setHistoryTab] = useState<'all' | 'active' | 'in_transit' | 'pending_payment' | 'completed'>('all');
@@ -217,8 +180,7 @@ export const BranchOrders: React.FC = () => {
     }
 
     const finalFilledTotal = Object.values(clampedQuantities).reduce((s, q) => s + (q || 0), 0);
-    setSelectedTierId(targetTier);
-    setQuantities(clampedQuantities);
+    selection.dispatch({ type: 'reset', tierId: targetTier, quantities: clampedQuantities });
     setOrderSuccessMsg(
       `Auto-filled ${finalFilledTotal} packs (capped to ${targetTierConfig.name} Package base capacity of ${targetTierConfig.baseCapacity} packs) based on Exponential Smoothing (α=0.3) demand velocity.`
     );
@@ -284,178 +246,21 @@ export const BranchOrders: React.FC = () => {
   const totalRequisitionSpend = branchOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
   const totalPacksRequisitioned = branchOrders.reduce((sum, o) => sum + (o.items?.reduce((s, it) => s + (it.quantity || 0), 0) || 0), 0);
 
-  const [exceedWarning, setExceedWarning] = useState<PackageExceedWarningDetails | null>(null);
-  const [isUpgradeCautionDismissed, setIsUpgradeCautionDismissed] = useState(false);
 
   const currentTier = PACKAGE_TIERS.find((t) => t.id === selectedTierId) || PACKAGE_TIERS[1];
   const totalPacks = Object.values(quantities).reduce((sum, q) => sum + (q || 0), 0);
   const isBelowBase = totalPacks < currentTier.baseCapacity;
   const { totalPrice, isExceeded, excessPacks } = calculatePackagePrice(currentTier, totalPacks);
 
-  // Dynamic Package Upgrade / Cost-Optimization analysis
-  const upgradeAnalysis = usePackageUpgradeOptimization(selectedTierId, quantities);
-
-  // Re-enable caution banner whenever the quantity changes significantly or tier changes
-  const handleUpgradeToNextTier = (nextTierId: 'silver' | 'gold' | 'platinum') => {
-    const nextTier = PACKAGE_TIERS.find((t) => t.id === nextTierId);
-    if (!nextTier) return;
-
-    setSelectedTierId(nextTierId);
-    setIsUpgradeCautionDismissed(false);
-
-    // If total packs exceed next tier's base capacity, scale or reset excess items to fit cleanly
-    if (totalPacks > nextTier.baseCapacity) {
-      let remainingToKeep = nextTier.baseCapacity;
-      const adjusted: Record<string, number> = {};
-      for (const [pId, qty] of Object.entries(quantities)) {
-        if (remainingToKeep <= 0) {
-          adjusted[pId] = 0;
-        } else if (qty <= remainingToKeep) {
-          adjusted[pId] = qty;
-          remainingToKeep -= qty;
-        } else {
-          adjusted[pId] = remainingToKeep;
-          remainingToKeep = 0;
-        }
-      }
-      setQuantities(adjusted);
-    }
-
-    setOrderSuccessMsg(
-      `⚡ Switched to ${nextTier.name} Package! Base capacity of ${nextTier.baseCapacity} packs applied at ₱${nextTier.price.toLocaleString()} bulk rate.`
-    );
-    setTimeout(() => setOrderSuccessMsg(null), 6000);
-  };
-
-  const isCapReached = totalPacks >= currentTier.baseCapacity;
-  const remainingAllowedPacks = Math.max(0, currentTier.baseCapacity - totalPacks);
-
-  const handleQtyChange = (productId: string, delta: number) => {
-    const product = products.find((p) => p.id === productId);
-    if (delta > 0 && totalPacks + delta > currentTier.baseCapacity) {
-      setExceedWarning({
-        isOpen: true,
-        tier: currentTier,
-        attemptedTotal: totalPacks + delta,
-        maxCap: currentTier.baseCapacity,
-        productFlavor: product?.flavor,
-        reason: 'cap_reached',
-      });
-      return;
-    }
-
-    setQuantities((prev) => {
-      const current = prev[productId] || 0;
-      if (delta > 0) {
-        // Enforce baseCapacity strictly as maximum limit
-        if (totalPacks >= currentTier.baseCapacity) return prev;
-        const safeDelta = Math.min(delta, currentTier.baseCapacity - totalPacks);
-        if (safeDelta <= 0) return prev;
-        const next = current + safeDelta;
-        return { ...prev, [productId]: next };
-      } else {
-        const next = Math.max(0, current + delta);
-        return { ...prev, [productId]: next };
-      }
-    });
-  };
-
-  const handleDirectQtyInput = (productId: string, rawVal: string) => {
-    const currentVal = quantities[productId] || 0;
-    const otherPacksTotal = totalPacks - currentVal;
-    const maxAvailableForThisItem = Math.max(0, currentTier.baseCapacity - otherPacksTotal);
-    const product = products.find((p) => p.id === productId);
-
-    if (rawVal === '') {
-      setQuantities((prev) => ({ ...prev, [productId]: 0 }));
-      return;
-    }
-
-    const parsed = parseInt(rawVal, 10);
-    if (isNaN(parsed) || parsed < 0) {
-      setQuantities((prev) => ({ ...prev, [productId]: 0 }));
-      return;
-    }
-
-    if (parsed > maxAvailableForThisItem) {
-      setExceedWarning({
-        isOpen: true,
-        tier: currentTier,
-        attemptedTotal: otherPacksTotal + parsed,
-        maxCap: currentTier.baseCapacity,
-        productFlavor: product?.flavor,
-        reason: 'input_exceeded',
-      });
-    }
-
-    // Clamp input between 0 and max available under the selected package's strict base capacity limit
-    const clamped = Math.max(0, Math.min(parsed, maxAvailableForThisItem));
-    setQuantities((prev) => ({ ...prev, [productId]: clamped }));
-  };
-
-  const handleSelectTier = (tierId: 'silver' | 'gold' | 'platinum') => {
-    const targetTier = PACKAGE_TIERS.find((t) => t.id === tierId) || PACKAGE_TIERS[1];
-    
-    // If switching to a tier where current total exceeds new tier's base capacity, show warning dialog and trim
-    if (totalPacks > targetTier.baseCapacity) {
-      setExceedWarning({
-        isOpen: true,
-        tier: currentTier,
-        targetTier,
-        attemptedTotal: totalPacks,
-        maxCap: targetTier.baseCapacity,
-        reason: 'tier_switch_exceeded',
-      });
-
-      let remainingAllowed = targetTier.baseCapacity;
-      const adjusted: Record<string, number> = {};
-      for (const [pId, qty] of Object.entries(quantities)) {
-        if (remainingAllowed <= 0) {
-          adjusted[pId] = 0;
-        } else if (qty <= remainingAllowed) {
-          adjusted[pId] = qty;
-          remainingAllowed -= qty;
-        } else {
-          adjusted[pId] = remainingAllowed;
-          remainingAllowed = 0;
-        }
-      }
-      setQuantities(adjusted);
-    }
-    setSelectedTierId(tierId);
-  };
-
-  const handleAutoAdjustToMaxCap = (targetCap?: number) => {
-    const cap = targetCap || currentTier.baseCapacity;
-    let remainingAllowed = cap;
-    const adjusted: Record<string, number> = {};
-    for (const [pId, qty] of Object.entries(quantities)) {
-      if (remainingAllowed <= 0) {
-        adjusted[pId] = 0;
-      } else if (qty <= remainingAllowed) {
-        adjusted[pId] = qty;
-        remainingAllowed -= qty;
-      } else {
-        adjusted[pId] = remainingAllowed;
-        remainingAllowed = 0;
-      }
-    }
-    setQuantities(adjusted);
-  };
+  const handleQtyChange = selection.changeQuantity;
+  const handleDirectQtyInput = selection.inputQuantity;
+  const handleSelectTier = selection.selectTier;
+  const isCapReached = totalPacks >= currentTier.maxCap;
 
   const handleInlinePlacePackageOrder = () => {
     if (totalPacks < currentTier.baseCapacity) return;
 
-    if (totalPacks > currentTier.baseCapacity) {
-      setExceedWarning({
-        isOpen: true,
-        tier: currentTier,
-        attemptedTotal: totalPacks,
-        maxCap: currentTier.baseCapacity,
-        reason: 'cap_reached',
-      });
-      return;
-    }
+    if (totalPacks > currentTier.maxCap || selection.state.pending) return;
 
     const orderItems = products
       .filter((p) => (quantities[p.id] || 0) > 0)
@@ -470,7 +275,7 @@ export const BranchOrders: React.FC = () => {
 
     const newOrd = createOrder(orderItems, totalPrice, packageName, currentTier.id);
     if (newOrd) {
-      setQuantities({});
+      selection.dispatch({ type: 'reset', tierId: selectedTierId });
       setOrderSuccessMsg(
         `Package Order #${newOrd.id} (${newOrd.packageName}) created successfully! Please attach proof of payment below.`
       );
@@ -521,12 +326,12 @@ export const BranchOrders: React.FC = () => {
                     {tier.name} Package
                   </span>
                 </div>
-                <p className="text-2xl font-black text-[#F37021] mt-2">
+              <p className="text-2xl font-black text-[#F37021] mt-2">
                   ₱{tier.price.toLocaleString()}
                 </p>
                 <div className="text-xs text-neutral-500 mt-1 space-y-0.5">
                   <p className="font-medium">
-                    Strict Limit: <strong className="text-neutral-800 dark:text-neutral-200">{tier.baseCapacity} packs</strong>
+                    Base includes: <strong className="text-neutral-800 dark:text-neutral-200">{tier.baseCapacity} packs</strong>
                   </p>
                   <p className="text-[11px] font-semibold text-neutral-600 dark:text-neutral-400">
                     Tier Capacity: <span className="text-[#F37021]">{tier.rangeLabel}</span>
@@ -539,23 +344,12 @@ export const BranchOrders: React.FC = () => {
                   {isSelected ? '✓ Selected' : 'Click to select'}
                 </span>
                 <span className="text-[10px] text-neutral-400">
-                  Strict max {tier.baseCapacity} packs
+                  Extra packs: ₱{tier.extraPackRate} each
                 </span>
               </div>
             </div>
           );
         })}
-      </div>
-
-      {/* Intelligent Package Upgrade / Cost-Optimization Caution Card */}
-      <div id="requisition-tour-upgrade-caution">
-        <PackageUpgradeCaution
-          analysis={upgradeAnalysis}
-          isDismissed={isUpgradeCautionDismissed}
-          onUpgrade={handleUpgradeToNextTier}
-          onDismiss={() => setIsUpgradeCautionDismissed(true)}
-          themeMode={themeMode as 'light' | 'dark'}
-        />
       </div>
 
       {orderSuccessMsg && (
@@ -568,7 +362,7 @@ export const BranchOrders: React.FC = () => {
       {/* Package Flavor Distribution Section */}
       <div
         id="requisition-tour-flavor-distribution"
-        className={`p-6 rounded-3xl border transition-all ${
+        className={`p-3 sm:p-6 rounded-3xl border transition-all ${
           isDark
             ? 'bg-neutral-900 border-neutral-800'
             : 'bg-gradient-to-b from-[#59B7E8]/10 via-white to-white border-neutral-200 shadow-xs'
@@ -585,7 +379,7 @@ export const BranchOrders: React.FC = () => {
               </h2>
             </div>
             <p className="text-xs text-neutral-500 mt-1">
-              Package Base Capacity: <strong>{currentTier.baseCapacity} packs strict maximum</strong>. Total pack selection cannot exceed this limit.
+              Package range: <strong>{currentTier.rangeLabel}</strong>. Extra packs cost ₱{currentTier.extraPackRate} each.
             </p>
           </div>
 
@@ -594,7 +388,7 @@ export const BranchOrders: React.FC = () => {
               <span
                 className="text-xs font-bold px-2.5 py-1 rounded-xl border bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300"
               >
-                Total: {totalPacks} / {currentTier.baseCapacity} packs
+                Total: {totalPacks} packs · {currentTier.rangeLabel}
               </span>
               <button
                 id="requisition-tour-autofill-btn"
@@ -607,7 +401,7 @@ export const BranchOrders: React.FC = () => {
                 <span>Auto-Fill (α=0.3)</span>
               </button>
               <button
-                onClick={() => setQuantities({})}
+                onClick={() => selection.dispatch({ type: 'reset', tierId: selectedTierId })}
                 disabled={totalPacks === 0}
                 className="text-xs text-neutral-400 hover:text-neutral-600 disabled:opacity-30 underline font-medium cursor-pointer"
               >
@@ -657,7 +451,7 @@ export const BranchOrders: React.FC = () => {
                   <input
                     type="number"
                     min="0"
-                    max={currentTier.baseCapacity}
+                    max={Math.max(0, currentTier.maxCap - totalPacks + currentQty)}
                     value={currentQty === 0 ? '' : currentQty}
                     onChange={(e) => handleDirectQtyInput(prod.id, e.target.value)}
                     placeholder="0"
@@ -674,7 +468,7 @@ export const BranchOrders: React.FC = () => {
                     }`}
                     title={
                       isCapReached
-                        ? `Maximum limit reached (${currentTier.baseCapacity} packs). Click to view options or upgrade package.`
+                        ? `Maximum limit reached (${currentTier.maxCap} packs). Click to view options or upgrade package.`
                         : 'Increase quantity'
                     }
                   >
@@ -688,15 +482,6 @@ export const BranchOrders: React.FC = () => {
 
         {/* Sticky Package Order Checkout Bar */}
         <div id="requisition-tour-checkout-bar" className="mt-6 pt-5 border-t border-neutral-200 dark:border-neutral-800 space-y-3">
-          {/* Also show caution here if manager is scrolled down near the checkout action */}
-          <PackageUpgradeCaution
-            analysis={upgradeAnalysis}
-            isDismissed={isUpgradeCautionDismissed}
-            onUpgrade={handleUpgradeToNextTier}
-            onDismiss={() => setIsUpgradeCautionDismissed(true)}
-            themeMode={themeMode as 'light' | 'dark'}
-            compact
-          />
 
           {isBelowBase && (
             <div className="p-3 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-semibold flex items-center space-x-2">
@@ -710,10 +495,11 @@ export const BranchOrders: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <p className="text-xs text-neutral-400">
-                Selected Package: <strong className="text-neutral-800 dark:text-neutral-200">{currentTier.name} Tier</strong> • Total: <strong className={isBelowBase ? 'text-amber-600 dark:text-amber-400' : isCapReached ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-neutral-800 dark:text-neutral-200'}>{totalPacks} / {currentTier.baseCapacity} packs</strong>
+                Selected Package: <strong className="text-neutral-800 dark:text-neutral-200">{currentTier.name} Tier</strong> • Total: <strong className={isBelowBase ? 'text-amber-600 dark:text-amber-400' : isCapReached ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-neutral-800 dark:text-neutral-200'}>{totalPacks} packs · {currentTier.rangeLabel}</strong>
               </p>
               <p className="text-2xl font-black text-[#F37021]">
                 ₱{totalPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                {excessPacks > 0 && <p className="text-xs text-neutral-600 dark:text-neutral-300">Base ₱{currentTier.price.toLocaleString()} + {excessPacks} extra × ₱{currentTier.extraPackRate}</p>}
                 {totalPacks > 0 && (
                   <span className="text-xs font-normal text-neutral-400 ml-2">
                     (≈ ₱{(totalPrice / totalPacks).toFixed(1)}/pack)
@@ -1619,15 +1405,12 @@ export const BranchOrders: React.FC = () => {
         />
       )}
 
-      {/* Package Capacity & Record Exceed Warning Dialog */}
-      <PackageCapacityWarningModal
-        warning={exceedWarning}
+      {/* Package decision message box */}
+      <PackageDecisionModal
+        pending={selection.state.pending}
+        onAction={type => selection.dispatch({ type })}
         themeMode={themeMode}
-        onClose={() => setExceedWarning(null)}
-        onUpgradeTier={(newTierId) => handleSelectTier(newTierId)}
-        onAutoAdjust={() => handleAutoAdjustToMaxCap(exceedWarning?.maxCap)}
       />
     </div>
   );
 };
-

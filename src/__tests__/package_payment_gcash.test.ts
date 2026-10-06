@@ -5,7 +5,7 @@ import { Order } from '../types';
 import fs from 'fs';
 import path from 'path';
 
-describe('Package Order Payment Selection & Dynamic GCash QR Codes', () => {
+describe('Package Order Payment Selection & Static GCash Images', () => {
   const baseOrder: Order = {
     id: 'ORD-TEST-001',
     branchId: 'branch-1',
@@ -56,14 +56,12 @@ describe('Package Order Payment Selection & Dynamic GCash QR Codes', () => {
     expect(details.formattedPrice).toBe('₱7,000.00');
   });
 
-  it('provides valid base64 data URL QR codes for all package tiers', () => {
-    expect(GCASH_TIER_QR_CODES.silver).toMatch(/^data:image\/png;base64,/);
-    expect(GCASH_TIER_QR_CODES.gold).toMatch(/^data:image\/png;base64,/);
-    expect(GCASH_TIER_QR_CODES.platinum).toMatch(/^data:image\/png;base64,/);
-
-    // Each tier has a unique QR code payload matching its amount
-    expect(GCASH_TIER_QR_CODES.silver).not.toEqual(GCASH_TIER_QR_CODES.gold);
-    expect(GCASH_TIER_QR_CODES.gold).not.toEqual(GCASH_TIER_QR_CODES.platinum);
+  it('provides an existing static JPEG image for each package tier', () => {
+    for (const imagePath of Object.values(GCASH_TIER_QR_CODES)) {
+      const image = fs.readFileSync(path.resolve(__dirname, '../../public', imagePath.slice(1)));
+      expect([...image.subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff]);
+    }
+    expect(new Set(Object.values(GCASH_TIER_QR_CODES)).size).toBe(3);
   });
 
   it('confirms BranchPaymentModal has removed Maya and Bank Transfer channels', () => {
@@ -94,6 +92,6 @@ describe('Package Order Payment Selection & Dynamic GCash QR Codes', () => {
 
     // Centered & responsive classes
     expect(modalContent.includes('flex flex-col items-center justify-center text-center')).toBe(true);
-    expect(modalContent.includes('w-48 h-48 sm:w-56 sm:h-56')).toBe(true);
+    expect(modalContent.includes('w-full max-w-xs h-auto mx-auto')).toBe(true);
   });
 });

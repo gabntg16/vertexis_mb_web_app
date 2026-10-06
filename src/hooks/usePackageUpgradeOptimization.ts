@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { PackageTier, PACKAGE_TIERS, calculatePackagePrice } from '../components/branch/BranchOrders';
+import { PackageTier, PACKAGE_TIERS, calculatePackagePrice } from '../utils/packagePricing';
 
 export interface PackageOptimizationAnalysis {
   shouldTriggerCaution: boolean;
@@ -24,13 +24,16 @@ export interface PackageOptimizationAnalysis {
  * makes it financially and operationally advantageous to switch to the next tier.
  *
  * Trigger Condition:
- * If (currentTotalCost >= nextTier.price * 0.90) i.e. exceeds or comes within 10% of the next tier's price.
+ * If (currentTotalCost >= nextTier.price) i.e. reaches or exceeds the next tier base price.
  */
 export function usePackageUpgradeOptimization(
   selectedTierId: 'silver' | 'gold' | 'platinum',
   quantities: Record<string, number>
 ): PackageOptimizationAnalysis {
-  return useMemo(() => {
+  return useMemo(() => analyzePackageUpgrade(selectedTierId, quantities), [selectedTierId, quantities]);
+}
+
+export function analyzePackageUpgrade(selectedTierId: 'silver' | 'gold' | 'platinum', quantities: Record<string, number>): PackageOptimizationAnalysis {
     const currentTier = PACKAGE_TIERS.find((t) => t.id === selectedTierId) || PACKAGE_TIERS[0];
     const currentTotalPacks = Object.values(quantities).reduce((sum, q) => sum + (q || 0), 0);
 
@@ -58,13 +61,13 @@ export function usePackageUpgradeOptimization(
         additionalPacksGained: 0,
         priceDifference: 0,
         isNextTierCheaper: false,
-        thresholdPercentage: 10,
+        thresholdPercentage: 0,
         percentageOfNextTier: 0,
       };
     }
 
     const nextTierPrice = nextTier.price;
-    const thresholdPrice = nextTierPrice * 0.90; // within 10% or exceeds
+    const thresholdPrice = nextTierPrice; // at or above the next base price
     const shouldTriggerCaution = currentTotalCost >= thresholdPrice && excessPacks > 0;
 
     const priceDifference = Math.round((nextTierPrice - currentTotalCost) * 100) / 100;
@@ -84,8 +87,7 @@ export function usePackageUpgradeOptimization(
       additionalPacksGained,
       priceDifference,
       isNextTierCheaper,
-      thresholdPercentage: 10,
+      thresholdPercentage: 0,
       percentageOfNextTier,
     };
-  }, [selectedTierId, quantities]);
 }

@@ -1,3 +1,4 @@
+import { packageTotal } from '../../functions/src/transactionModel';
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { doc, runTransaction } from 'firebase/firestore';
 import {
@@ -2428,7 +2429,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const computedTotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-      const finalTotal = customTotal !== undefined && customTotal > 0 ? customTotal : computedTotal;
+      const finalTotal = packageTier ? packageTotal(packageTier, items.reduce((sum, item) => sum + item.quantity, 0)) : customTotal !== undefined && customTotal > 0 ? customTotal : computedTotal;
       const shortBranch = branch.name.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase();
       const orderIdSuffix = Date.now().toString().slice(-4);
       const newOrder: Order = {

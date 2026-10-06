@@ -1,8 +1,8 @@
 // Shared, SDK-free validation. Monetary arithmetic uses integer centavos.
 export const PACKAGE_PRICES = {
-  silver: { name: 'Silver', price: 3999, baseCapacity: 35, maxCap: 54 },
-  gold: { name: 'Gold', price: 5775, baseCapacity: 55, maxCap: 69 },
-  platinum: { name: 'Platinum', price: 7000, baseCapacity: 70, maxCap: 999 },
+  silver: { name: 'Silver', price: 3999, baseCapacity: 35, maxCap: 54, extraPackRate: 115 },
+  gold: { name: 'Gold', price: 5775, baseCapacity: 55, maxCap: 69, extraPackRate: 105 },
+  platinum: { name: 'Platinum', price: 7000, baseCapacity: 70, maxCap: 1000000, extraPackRate: 100 },
 } as const;
 
 export function wholeQuantity(value: unknown, allowZero = false): number {
@@ -18,7 +18,7 @@ export function packageTotal(tier: keyof typeof PACKAGE_PRICES, packs: number): 
   const config = PACKAGE_PRICES[tier];
   wholeQuantity(packs);
   if (!config || packs < config.baseCapacity || packs > config.maxCap) throw new Error('Select a package that supports this quantity.');
-  return Math.round(config.price * 100 * Math.max(config.baseCapacity, packs) / config.baseCapacity) / 100;
+  return config.price + (packs - config.baseCapacity) * config.extraPackRate;
 }
 export function validId(value: unknown): string {
   if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(value)) throw new Error('Invalid record reference.');

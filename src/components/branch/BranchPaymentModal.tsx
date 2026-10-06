@@ -2,8 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X, Upload, AlertCircle, ReceiptText, Smartphone, ShieldCheck, Check, QrCode } from 'lucide-react';
 import { Order, DigitalPaymentMethod, PaymentGatewayStatus } from '../../types';
 import { validateUploadedFile } from '../../utils/fileValidation';
-import { GCASH_TIER_QR_CODES } from '../../utils/gcashQRCodes';
-import QRCode from 'qrcode';
+import { getGCashQRCode } from '../../utils/gcashQRCodes';
 
 export interface PackageTierDetails {
   id: 'silver' | 'gold' | 'platinum';
@@ -18,7 +17,7 @@ export const getPackageTierDetails = (order: Order): PackageTierDetails => {
   const name = (order.packageName || '').toLowerCase();
   const amount = Math.round(Number(order.totalAmount || 0));
 
-  if (tier === 'platinum' || name.includes('platinum') || amount === 7000) {
+  if (tier === 'platinum' || (!tier && (name.includes('platinum') || amount === 7000))) {
     return {
       id: 'platinum',
       name: 'Platinum Package',
@@ -27,7 +26,7 @@ export const getPackageTierDetails = (order: Order): PackageTierDetails => {
       badgeClass: 'bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800',
     };
   }
-  if (tier === 'gold' || name.includes('gold') || amount === 5775) {
+  if (tier === 'gold' || (!tier && (name.includes('gold') || amount === 5775))) {
     return {
       id: 'gold',
       name: 'Gold Package',
@@ -68,9 +67,8 @@ export const BranchPaymentModal: React.FC<BranchPaymentModalProps> = ({ order, b
   const [error, setError] = useState('');
   const [validating, setValidating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [qrCodeUrl, setQrCodeUrl] = useState<string>(
-    GCASH_TIER_QR_CODES[tierDetails.id] || GCASH_TIER_QR_CODES.silver
-  );
+  const packCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const qrCodeUrl = getGCashQRCode(tierDetails.id, packCount, order.totalAmount);
 
   const busy = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -83,38 +81,6 @@ export const BranchPaymentModal: React.FC<BranchPaymentModalProps> = ({ order, b
     dialog.current?.focus();
     return () => { document.body.style.overflow = previousOverflow; previous?.focus(); };
   }, []);
-
-  // Dynamically update/verify QR code data URL based on chosen package tier
-  useEffect(() => {
-    let isCurrent = true;
-    const tier = getPackageTierDetails(order);
-    const defaultUrl = GCASH_TIER_QR_CODES[tier.id] || GCASH_TIER_QR_CODES.silver;
-    setQrCodeUrl(defaultUrl);
-
-    const payload = `https://get.gcash.com/pay?merchant=CentralBicolCommissary&package=${encodeURIComponent(tier.name)}&amount=${tier.price}&order=${encodeURIComponent(order.id)}`;
-
-    QRCode.toDataURL(payload, {
-      margin: 1,
-      width: 320,
-      errorCorrectionLevel: 'M',
-      color: {
-        dark: '#005CE6',
-        light: '#FFFFFF',
-      },
-    })
-      .then((generatedUrl) => {
-        if (isCurrent && generatedUrl) {
-          setQrCodeUrl(generatedUrl);
-        }
-      })
-      .catch((err) => {
-        console.warn('Using pre-rendered GCash QR code for tier:', tier.id, err);
-      });
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [order]);
 
   const upload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -139,7 +105,7 @@ export const BranchPaymentModal: React.FC<BranchPaymentModalProps> = ({ order, b
     finally { busy.current = false; setSaving(false); }
   };
 
-  const total = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(order.totalAmount || tierDetails.price);
+  const total = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(order.totalAmount);
 
   return (
     <div className={`${themeMode === 'dark' ? 'dark ' : ''}fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm sm:p-6`}>
@@ -176,7 +142,7 @@ export const BranchPaymentModal: React.FC<BranchPaymentModalProps> = ({ order, b
           <section aria-label="Order summary" className="space-y-2.5 rounded-2xl border border-neutral-200 bg-neutral-50 p-3.5 dark:border-neutral-700 dark:bg-neutral-800/50">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">TOTAL PAYMENT DUE</span>
-              <strong className="text-xl font-black text-blue-600 dark:text-blue-400">{tierDetails.formattedPrice || total}</strong>
+              <strong className="text-xl font-black text-blue-600 dark:text-blue-400">{total}</strong>
             </div>
             {order.packageName && (
               <div className="flex items-center justify-between text-xs font-semibold">
@@ -229,7 +195,7 @@ export const BranchPaymentModal: React.FC<BranchPaymentModalProps> = ({ order, b
 
             {/* Dynamic GCash QR Code Payment Instructions */}
             <div className="rounded-2xl border border-blue-200 bg-gradient-to-b from-blue-50/70 via-white to-blue-50/30 p-4 sm:p-5 dark:border-blue-900 dark:from-blue-950/30 dark:via-neutral-900 dark:to-neutral-900 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-blue-100 dark:border-blue-900/60 pb-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-100 dark:border-blue-900/60 pb-3">
                 <div>
                   <h4 className="text-xs font-bold text-blue-900 dark:text-blue-200 uppercase tracking-wider">
                     GCash Payment Instructions
@@ -243,9 +209,14 @@ export const BranchPaymentModal: React.FC<BranchPaymentModalProps> = ({ order, b
                 </span>
               </div>
 
+              <div className="text-center rounded-xl bg-blue-100 p-3 dark:bg-blue-950" aria-live="polite">
+                <p className="text-xs font-bold uppercase text-blue-800 dark:text-blue-200">Total Amount Due</p>
+                <p className="text-3xl sm:text-4xl font-black text-blue-700 dark:text-blue-300 break-words">{total}</p>
+                <p className="text-xs mt-1">{packCount} packs · Enter this exact amount in GCash.</p>
+              </div>
               {/* Centered Responsive QR Code Card */}
               <div className="flex flex-col items-center justify-center text-center space-y-3">
-                <div className="relative group p-3.5 sm:p-4 bg-white rounded-3xl shadow-md border-2 border-blue-400/40 dark:border-blue-500/50 inline-flex flex-col items-center">
+                <div className="w-full max-w-sm p-3.5 sm:p-4 bg-white rounded-3xl shadow-md border-2 border-blue-400/40 dark:border-blue-500/50 inline-flex flex-col items-center">
                   {/* Top banner tag */}
                   <div className="mb-2 px-3 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1">
                     <Smartphone size={11} className="text-blue-600" />
@@ -254,13 +225,13 @@ export const BranchPaymentModal: React.FC<BranchPaymentModalProps> = ({ order, b
 
                   <img
                     src={qrCodeUrl}
-                    alt={`GCash QR Code for ${tierDetails.name} (${tierDetails.formattedPrice})`}
-                    className="w-48 h-48 sm:w-56 sm:h-56 object-contain rounded-xl transition-transform hover:scale-102"
+                    alt={`GCash QR Code for ${tierDetails.name} (${total})`}
+                    className="block w-full max-w-xs h-auto mx-auto rounded-lg shadow-md object-contain"
                   />
 
                   {/* Price Tag pill */}
                   <div className="mt-2.5 px-4 py-1 rounded-full bg-blue-600 text-white text-xs sm:text-sm font-black shadow-xs tracking-tight">
-                    {tierDetails.formattedPrice}
+                    {total}
                   </div>
                 </div>
 
@@ -271,7 +242,7 @@ export const BranchPaymentModal: React.FC<BranchPaymentModalProps> = ({ order, b
                     <span>Scan to pay via GCash</span>
                   </p>
                   <p className="text-xs text-neutral-600 dark:text-neutral-300 leading-snug">
-                    Please scan the QR code above in your GCash app and transfer exactly <strong className="text-blue-600 dark:text-blue-400">{tierDetails.formattedPrice}</strong> before uploading your payment proof.
+                    Please scan the QR code above in your GCash app and transfer exactly <strong className="text-blue-600 dark:text-blue-400">{total}</strong> before uploading your payment proof.
                   </p>
                 </div>
 
@@ -287,7 +258,7 @@ export const BranchPaymentModal: React.FC<BranchPaymentModalProps> = ({ order, b
                   </div>
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="text-neutral-400">Amount Due:</span>
-                    <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{tierDetails.formattedPrice}</span>
+                    <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{total}</span>
                   </div>
                 </div>
               </div>

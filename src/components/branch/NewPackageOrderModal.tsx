@@ -1,61 +1,13 @@
-import { PACKAGE_PRICES } from '../../../functions/src/transactionModel';
+import { usePackageSelection } from '../../hooks/usePackageSelection';
+import { PackageDecisionModal } from '../common/PackageDecisionModal';
 import React, { useState, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { Minus, Plus, X, AlertCircle } from 'lucide-react';
 import { Order } from '../../types';
-import { PackageCapacityWarningModal, PackageExceedWarningDetails } from './PackageCapacityWarningModal';
-import { usePackageUpgradeOptimization } from '../../hooks/usePackageUpgradeOptimization';
-import { PackageUpgradeCaution } from '../common/PackageUpgradeCaution';
 
-export interface PackageTier {
-  id: 'silver' | 'gold' | 'platinum';
-  name: string;
-  price: number;
-  baseCapacity: number;
-  maxCap: number;
-  rangeLabel: string;
-}
-
-export const PACKAGE_TIERS: PackageTier[] = [
-  { id: 'silver', ...PACKAGE_PRICES.silver, maxCap: 35, rangeLabel: '35 packs' },
-  { id: 'gold', ...PACKAGE_PRICES.gold, maxCap: 55, rangeLabel: '55 packs' },
-  { id: 'platinum', ...PACKAGE_PRICES.platinum, maxCap: 70, rangeLabel: '70 packs' },
-];
-
-/**
- * Calculates package price with pro-rata package rates for any excess packs
- * e.g., Gold (55 packs @ ₱5,775 -> ₱105/pack). If total is 56, 5,775 + 105 = ₱5,880.00.
- */
-export function calculatePackagePrice(tier: PackageTier, totalPacks: number): {
-  totalPrice: number;
-  isExceeded: boolean;
-  excessPacks: number;
-  ratePerPack: number;
-} {
-  const ratePerPack = tier.price / tier.baseCapacity;
-  if (totalPacks === 0) {
-    return { totalPrice: 0, isExceeded: false, excessPacks: 0, ratePerPack };
-  }
-
-  if (totalPacks <= tier.baseCapacity) {
-    return {
-      totalPrice: tier.price,
-      isExceeded: false,
-      excessPacks: 0,
-      ratePerPack,
-    };
-  }
-
-  const excessPacks = totalPacks - tier.baseCapacity;
-  const totalPrice = Math.round((tier.price + excessPacks * ratePerPack) * 100) / 100;
-
-  return {
-    totalPrice,
-    isExceeded: true,
-    excessPacks,
-    ratePerPack,
-  };
-}
+import { PACKAGE_TIERS, calculatePackagePrice } from '../../utils/packagePricing';
+export { PACKAGE_TIERS, calculatePackagePrice } from '../../utils/packagePricing';
+export type { PackageTier } from '../../utils/packagePricing';
 
 interface NewPackageOrderModalProps {
   isOpen: boolean;
@@ -72,185 +24,32 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
 }) => {
   const { products, createOrder } = useData();
 
-  const [selectedTierId, setSelectedTierId] = useState<'silver' | 'gold' | 'platinum'>(initialTierId);
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const selection = usePackageSelection(initialTierId);
+  const { tierId: selectedTierId, quantities } = selection.state;
   const [savingOrder, setSavingOrder] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [exceedWarning, setExceedWarning] = useState<PackageExceedWarningDetails | null>(null);
-  const [isUpgradeCautionDismissed, setIsUpgradeCautionDismissed] = useState(false);
 
-  // Reset when opening
   useEffect(() => {
-    if (isOpen) {
-      setQuantities({});
-      setSelectedTierId(initialTierId);
-      setExceedWarning(null);
-      setIsUpgradeCautionDismissed(false);
-    }
-  }, [isOpen, initialTierId]);
+    selection.dispatch({ type: 'reset', tierId: initialTierId });
+  }, [isOpen, initialTierId, selection.dispatch]);
 
   const totalPacks = Object.values(quantities).reduce((sum, q) => sum + (q || 0), 0);
   const currentTier = PACKAGE_TIERS.find((t) => t.id === selectedTierId) || PACKAGE_TIERS[1];
   const isBelowBase = totalPacks < currentTier.baseCapacity;
-  const isCapReached = totalPacks >= currentTier.baseCapacity;
+  const isCapReached = totalPacks >= currentTier.maxCap;
   const { totalPrice, isExceeded, excessPacks } = calculatePackagePrice(currentTier, totalPacks);
 
-  // Intelligent upgrade optimization calculation
-  const upgradeAnalysis = usePackageUpgradeOptimization(selectedTierId, quantities);
-
-  const handleUpgradeToNextTier = (nextTierId: 'silver' | 'gold' | 'platinum') => {
-    const nextTier = PACKAGE_TIERS.find((t) => t.id === nextTierId);
-    if (!nextTier) return;
-
-    setSelectedTierId(nextTierId);
-    setIsUpgradeCautionDismissed(false);
-
-    // If packs exceed next tier's base capacity, scale or reset excess items to fit cleanly
-    if (totalPacks > nextTier.baseCapacity) {
-      let remainingToKeep = nextTier.baseCapacity;
-      const adjusted: Record<string, number> = {};
-      for (const [pId, qty] of Object.entries(quantities)) {
-        if (remainingToKeep <= 0) {
-          adjusted[pId] = 0;
-        } else if (qty <= remainingToKeep) {
-          adjusted[pId] = qty;
-          remainingToKeep -= qty;
-        } else {
-          adjusted[pId] = remainingToKeep;
-          remainingToKeep = 0;
-        }
-      }
-      setQuantities(adjusted);
-    }
-  };
-
+  const handleQuantityChange = selection.changeQuantity;
+  const handleDirectQtyInput = selection.inputQuantity;
+  const handleSelectTier = selection.selectTier;
   if (!isOpen) return null;
-
-  const handleQuantityChange = (productId: string, delta: number) => {
-    const product = products.find((p) => p.id === productId);
-    if (delta > 0 && totalPacks + delta > currentTier.baseCapacity) {
-      setExceedWarning({
-        isOpen: true,
-        tier: currentTier,
-        attemptedTotal: totalPacks + delta,
-        maxCap: currentTier.baseCapacity,
-        productFlavor: product?.flavor,
-        reason: 'cap_reached',
-      });
-      return;
-    }
-
-    setQuantities((prev) => {
-      const currentQty = prev[productId] || 0;
-      if (delta > 0) {
-        if (totalPacks >= currentTier.baseCapacity) return prev;
-        const safeDelta = Math.min(delta, currentTier.baseCapacity - totalPacks);
-        if (safeDelta <= 0) return prev;
-        return { ...prev, [productId]: currentQty + safeDelta };
-      }
-      const nextQty = Math.max(0, currentQty + delta);
-      return { ...prev, [productId]: nextQty };
-    });
-  };
-
-  const handleDirectQtyInput = (productId: string, rawVal: string) => {
-    const otherPacksTotal = Object.entries(quantities)
-      .filter(([id]) => id !== productId)
-      .reduce((sum, [, q]) => sum + (q || 0), 0);
-
-    const maxAvailableForThisItem = Math.max(0, currentTier.baseCapacity - otherPacksTotal);
-    const product = products.find((p) => p.id === productId);
-
-    if (rawVal === '') {
-      setQuantities((prev) => ({ ...prev, [productId]: 0 }));
-      return;
-    }
-
-    const parsed = parseInt(rawVal, 10);
-    if (isNaN(parsed) || parsed < 0) {
-      setQuantities((prev) => ({ ...prev, [productId]: 0 }));
-      return;
-    }
-
-    if (parsed > maxAvailableForThisItem) {
-      setExceedWarning({
-        isOpen: true,
-        tier: currentTier,
-        attemptedTotal: otherPacksTotal + parsed,
-        maxCap: currentTier.baseCapacity,
-        productFlavor: product?.flavor,
-        reason: 'input_exceeded',
-      });
-    }
-
-    const clamped = Math.max(0, Math.min(parsed, maxAvailableForThisItem));
-    setQuantities((prev) => ({ ...prev, [productId]: clamped }));
-  };
-
-  const handleSelectTier = (tierId: 'silver' | 'gold' | 'platinum') => {
-    const targetTier = PACKAGE_TIERS.find((t) => t.id === tierId) || PACKAGE_TIERS[1];
-
-    if (totalPacks > targetTier.baseCapacity) {
-      setExceedWarning({
-        isOpen: true,
-        tier: currentTier,
-        targetTier,
-        attemptedTotal: totalPacks,
-        maxCap: targetTier.baseCapacity,
-        reason: 'tier_switch_exceeded',
-      });
-
-      let remainingAllowed = targetTier.baseCapacity;
-      const adjusted: Record<string, number> = {};
-      for (const [pId, qty] of Object.entries(quantities)) {
-        if (remainingAllowed <= 0) {
-          adjusted[pId] = 0;
-        } else if (qty <= remainingAllowed) {
-          adjusted[pId] = qty;
-          remainingAllowed -= qty;
-        } else {
-          adjusted[pId] = remainingAllowed;
-          remainingAllowed = 0;
-        }
-      }
-      setQuantities(adjusted);
-    }
-    setSelectedTierId(tierId);
-  };
-
-  const handleAutoAdjustToMaxCap = (targetCap?: number) => {
-    const cap = targetCap || currentTier.baseCapacity;
-    let remainingAllowed = cap;
-    const adjusted: Record<string, number> = {};
-    for (const [pId, qty] of Object.entries(quantities)) {
-      if (remainingAllowed <= 0) {
-        adjusted[pId] = 0;
-      } else if (qty <= remainingAllowed) {
-        adjusted[pId] = qty;
-        remainingAllowed -= qty;
-      } else {
-        adjusted[pId] = remainingAllowed;
-        remainingAllowed = 0;
-      }
-    }
-    setQuantities(adjusted);
-  };
 
   const handlePlaceOrder = async () => {
     if (savingOrder) return;
     setSaveError('');
     if (totalPacks < currentTier.baseCapacity) return;
 
-    if (totalPacks > currentTier.baseCapacity) {
-      setExceedWarning({
-        isOpen: true,
-        tier: currentTier,
-        attemptedTotal: totalPacks,
-        maxCap: currentTier.baseCapacity,
-        reason: 'cap_reached',
-      });
-      return;
-    }
+    if (totalPacks > currentTier.maxCap || selection.state.pending) return;
 
     const orderItems = products
       .filter((p) => (quantities[p.id] || 0) > 0)
@@ -284,14 +83,14 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-xs p-3 sm:p-5 overflow-y-auto">
-      <div className="w-full max-w-[540px] max-h-[92vh] flex flex-col rounded-[28px] shadow-2xl overflow-hidden my-auto bg-[#59B7E8] text-slate-900 border border-[#48a2d1] animate-in fade-in zoom-in-95 duration-200">
+      <div className="w-full max-w-[540px] max-h-[92vh] flex flex-col rounded-[28px] shadow-2xl overflow-y-auto my-auto bg-[#59B7E8] text-slate-900 border border-[#48a2d1] animate-in fade-in zoom-in-95 duration-200">
         {/* Top Grab Handle */}
         <div className="pt-3 pb-1 flex justify-center shrink-0">
           <div className="w-12 h-1.5 bg-white/40 rounded-full" />
         </div>
 
         {/* Modal Header */}
-        <div className="px-6 pt-1 pb-3 flex items-start justify-between shrink-0">
+        <div className="px-4 sm:px-6 pt-1 pb-3 flex items-start justify-between shrink-0">
           <div>
             <h2 className="text-xl font-bold tracking-tight text-slate-900">
               New Package Order
@@ -310,7 +109,7 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
         </div>
 
         {/* Package Selector Cards (3 Tabs) */}
-        <div className="px-6 pb-4 shrink-0">
+        <div className="px-4 sm:px-6 pb-4 shrink-0">
           <div className="grid grid-cols-3 gap-2.5">
             {PACKAGE_TIERS.map((tier) => {
               const isSelected = selectedTierId === tier.id;
@@ -338,21 +137,10 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
               );
             })}
           </div>
-
-          {/* Intelligent Package Upgrade Caution Banner */}
-          <div className="mt-3">
-            <PackageUpgradeCaution
-              analysis={upgradeAnalysis}
-              isDismissed={isUpgradeCautionDismissed}
-              onUpgrade={handleUpgradeToNextTier}
-              onDismiss={() => setIsUpgradeCautionDismissed(true)}
-              themeMode="light"
-            />
-          </div>
         </div>
 
         {/* Scrollable Flavors Distribution List */}
-        <div className="px-6 overflow-y-auto space-y-2.5 flex-1 min-h-0 pb-3">
+        <div className="px-4 sm:px-4 sm:px-6 space-y-2.5 shrink-0 pb-3">
           {products.map((prod) => {
             const currentQty = quantities[prod.id] || 0;
             const isAddDisabled = isCapReached;
@@ -386,7 +174,7 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
                   <input
                     type="number"
                     min="0"
-                    max={currentTier.baseCapacity}
+                    max={Math.max(0, currentTier.maxCap - totalPacks + currentQty)}
                     value={currentQty === 0 ? '' : currentQty}
                     onChange={(e) => handleDirectQtyInput(prod.id, e.target.value)}
                     placeholder="0"
@@ -401,7 +189,7 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
                         ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 border border-dashed border-amber-400 cursor-pointer'
                         : 'text-slate-700 bg-slate-100 hover:bg-slate-200 cursor-pointer'
                     }`}
-                    title={isCapReached ? `Maximum limit reached (${currentTier.baseCapacity} packs). Click to upgrade.` : 'Increase quantity'}
+                    title={isCapReached ? `Maximum limit reached (${currentTier.maxCap} packs). Click to upgrade.` : 'Increase quantity'}
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -412,7 +200,7 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
         </div>
 
         {/* Bottom Bar Container */}
-        <div className="bg-[#48a5d3]/60 px-6 pt-3 pb-4 border-t border-[#419ac6] shrink-0 space-y-3">
+        <div className="bg-[#48a5d3]/60 px-4 sm:px-6 pt-3 pb-4 border-t border-[#419ac6] shrink-0 space-y-3">
           {/* Below Minimum Base Alert Banner */}
           {isBelowBase && (
             <div className="p-2.5 rounded-xl bg-amber-500/90 text-white text-xs font-bold text-center leading-snug border border-amber-400 flex items-center justify-center space-x-1.5 shadow-xs">
@@ -424,11 +212,12 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
           )}
 
           {/* Totals and Place Order button */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <p className={`text-xs font-bold ${isBelowBase ? 'text-amber-950' : isCapReached ? 'text-emerald-950 font-extrabold' : 'text-slate-800'}`}>
-                Total Packs: {totalPacks} / {currentTier.baseCapacity} packs (Strict Limit: {currentTier.baseCapacity})
+                Total Packs: {totalPacks} (Range: {currentTier.rangeLabel})
               </p>
+              {excessPacks > 0 && <p className="text-xs">Base ₱{currentTier.price.toLocaleString()} + {excessPacks} extra × ₱{currentTier.extraPackRate}</p>}
               <p className="text-2xl font-black text-[#F37021] tracking-tight">
                 ₱{totalPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </p>
@@ -452,13 +241,11 @@ export const NewPackageOrderModal: React.FC<NewPackageOrderModalProps> = ({
         </div>
       </div>
 
-      {/* Package Capacity & Record Exceed Warning Dialog */}
-      <PackageCapacityWarningModal
-        warning={exceedWarning}
+      {/* Package decision message box */}
+      <PackageDecisionModal
+        pending={selection.state.pending}
+        onAction={type => selection.dispatch({ type })}
         themeMode="light"
-        onClose={() => setExceedWarning(null)}
-        onUpgradeTier={(newTierId) => handleSelectTier(newTierId)}
-        onAutoAdjust={() => handleAutoAdjustToMaxCap(exceedWarning?.maxCap)}
       />
     </div>
   );
